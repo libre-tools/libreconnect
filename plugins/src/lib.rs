@@ -107,3 +107,22 @@ impl Plugin for InputSharePlugin {
         }
     }
 }
+
+pub struct NotificationSyncPlugin;
+
+impl Plugin for NotificationSyncPlugin {
+    fn name(&self) -> &'static str {
+        "notification-sync"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::Notification { title, body, app_name } => {
+                println!("Notification from {}: Title=\"{}\", Body=\"{}\", App={:?}", sender_id, title, body, app_name);
+                // In a real scenario, you'd display the notification
+                None
+            },
+            _ => None,
+        }
+    }
+}
