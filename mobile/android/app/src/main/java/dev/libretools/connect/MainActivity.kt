@@ -110,6 +110,8 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
     var notificationBody by remember { mutableStateOf("") }
     var receivedNotification by remember { mutableStateOf("No new notifications") }
     var mediaControlStatus by remember { mutableStateOf("Media Control: Idle") }
+    var remoteCommandInput by remember { mutableStateOf("") }
+    var remoteCommandArgs by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -273,6 +275,26 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
                 Button(onClick = { mediaControlStatus = "Media Control: Volume Down (simulated)" }) { Text("Vol Down") }
             }
             Button(onClick = { mediaControlStatus = "Media Control: Toggle Mute (simulated)" }) { Text("Toggle Mute") }
+
+            // Remote Commands
+            TextField(
+                value = remoteCommandInput,
+                onValueChange = { remoteCommandInput = it },
+                label = { Text("Remote Command") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = remoteCommandArgs,
+                onValueChange = { remoteCommandArgs = it },
+                label = { Text("Command Arguments (comma-separated)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(onClick = {
+                println("Simulating sending remote command: $remoteCommandInput with args $remoteCommandArgs")
+                // In a real app, this would send the remote command to the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Send Remote Command")
+            }
 
             Spacer(Modifier.height(16.dp))
             Button(onClick = { navController.popBackStack() }) {
