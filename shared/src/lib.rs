@@ -60,6 +60,7 @@ pub enum Message {
     BatteryStatus(BatteryStatus),
     RemoteCommand { command: String, args: Vec<String> },
     TouchpadEvent(TouchpadEvent),
+    SlideControl(SlideControlAction),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -139,6 +140,14 @@ pub struct TouchpadEvent {
     pub scroll_delta_y: f32,
     pub is_left_click: bool,
     pub is_right_click: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum SlideControlAction {
+    NextSlide,
+    PreviousSlide,
+    StartPresentation,
+    EndPresentation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

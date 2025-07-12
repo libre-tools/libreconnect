@@ -1,4 +1,4 @@
-use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction, BatteryStatus, TouchpadEvent};
+use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction, BatteryStatus, TouchpadEvent, SlideControlAction};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
@@ -156,7 +156,7 @@ impl Plugin for BatteryStatusPlugin {
     fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
         match message {
             Message::BatteryStatus(status) => {
-                println!("Battery status from {}: Charge={}, Charging={}", sender_id, status.charge, status.is_charging);
+                println!("Battery status from {}: Charge={}%", sender_id, status.charge);
                 // In a real scenario, you'd update the local battery status display
                 None
             },
@@ -196,6 +196,25 @@ impl Plugin for TouchpadModePlugin {
             Message::TouchpadEvent(event) => {
                 println!("Touchpad event from {}: {:?}", sender_id, event);
                 // In a real scenario, you'd simulate the touchpad event
+                None
+            },
+            _ => None,
+        }
+    }
+}
+
+pub struct SlideControlPlugin;
+
+impl Plugin for SlideControlPlugin {
+    fn name(&self) -> &'static str {
+        "slide-control"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::SlideControl(action) => {
+                println!("Slide control action from {}: {:?}", sender_id, action);
+                // In a real scenario, you'd simulate the slide control action
                 None
             },
             _ => None,
