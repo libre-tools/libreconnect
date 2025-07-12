@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use shared::{DeviceId, DeviceInfo, DeviceType, Message};
+use shared::{DeviceId, Message};
 use serde_json;
 
 #[derive(Parser, Debug)]
@@ -17,21 +17,17 @@ enum Commands {
     StartDaemon,
     /// Send a ping to the daemon
     PingDaemon,
-    /// List connected devices
-    ListDevices,
-    /// Send a file to a device
-    SendFile {
+    /// Set clipboard content on a device
+    SetClipboard {
         /// The ID of the target device
         device_id: String,
-        /// The path to the file to send
-        file_path: String,
+        /// The content to set on the clipboard
+        content: String,
     },
-    /// Send a message to a device
-    SendMessage {
+    /// Request clipboard content from a device
+    GetClipboard {
         /// The ID of the target device
         device_id: String,
-        /// The message to send
-        message: String,
     },
 }
 
@@ -59,35 +55,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => println!("Received unexpected response: {:?}", response_message),
             }
         },
-        Commands::ListDevices => {
-            println!("Listing devices...");
-            // Placeholder for connecting to daemon and requesting device list
+        Commands::SetClipboard { device_id, content } => {
+            println!("Setting clipboard on device.");
             let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
-            stream.write_all(b"list_devices").await?;
+            let message = serde_json::to_vec(&Message::ClipboardSync(content.clone()))?;
+            stream.write_all(&message).await?;
+
             let mut buffer = vec![0; 1024];
             let n = stream.read(&mut buffer).await?;
-            let response = String::from_utf8_lossy(&buffer[..n]);
-            println!("Daemon response: {}", response);
+            let response_message: Message = serde_json::from_slice(&buffer[0..n])?;
+            println!("Daemon response: {:?}", response_message);
         },
-        Commands::SendFile { device_id, file_path } => {
-            println!("Sending file {} to device {}", file_path, device_id);
-            // Placeholder for connecting to daemon and sending file
+        Commands::GetClipboard { device_id } => {
+            println!("Requesting clipboard from device.");
             let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
-            stream.write_all(format!("send_file {},{}", device_id, file_path).as_bytes()).await?;
+            let message = serde_json::to_vec(&Message::RequestClipboard)?;
+            stream.write_all(&message).await?;
+
             let mut buffer = vec![0; 1024];
             let n = stream.read(&mut buffer).await?;
-            let response = String::from_utf8_lossy(&buffer[..n]);
-            println!("Daemon response: {}", response);
-        },
-        Commands::SendMessage { device_id, message } => {
-            println!("Sending message \"{}\" to device {}", message, device_id);
-            // Placeholder for connecting to daemon and sending message
-            let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
-            stream.write_all(format!("send_message {},{}", device_id, message).as_bytes()).await?;
-            let mut buffer = vec![0; 1024];
-            let n = stream.read(&mut buffer).await?;
-            let response = String::from_utf8_lossy(&buffer[..n]);
-            println!("Daemon response: {}", response);
+            let response_message: Message = serde_json::from_slice(&buffer[0..n])?;
+
+            match response_message {
+                Message::ClipboardSync(content) => println!("Received clipboard: {}", content),
+                _ => println!("Received unexpected response: {:?}", response_message),
+            }
         },
     }
 
