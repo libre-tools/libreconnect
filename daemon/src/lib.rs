@@ -1,5 +1,3 @@
-mod ffi;
-
 use shared::{DeviceId, DeviceInfo, DeviceType, Message};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
