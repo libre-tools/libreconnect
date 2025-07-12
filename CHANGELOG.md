@@ -13,3 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic `Daemon` struct and TCP listener added to `daemon` crate.
 - Basic CLI structure and command parsing added to `cli` crate.
 - Basic `Plugin` trait and `PingPlugin` implementation added to `plugins` crate.
+
+### Changed
+- mDNS integration in `daemon` crate temporarily put on hold due to library issues.
