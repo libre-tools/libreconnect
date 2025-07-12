@@ -18,6 +18,10 @@ impl Plugin for PingPlugin {
                 println!("Ping received from {}. Sending Pong.", sender_id);
                 Some(Message::Pong)
             },
+            Message::Pong => {
+                println!("Pong received from {}.", sender_id);
+                None
+            },
             _ => None,
         }
     }

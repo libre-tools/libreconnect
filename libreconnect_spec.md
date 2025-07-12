@@ -135,7 +135,7 @@ libreconnect/
 | Rust-Android FFI              | ⏸️ On Hold     | Complexities with cross-compilation and NDK integration. |
 | CLI tool (`libreconnect-cli`) | ⏳ In Progress | Basic structure and command parsing added |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
-| Plugin dispatcher             | ⏳ In Progress | Basic plugin trait and PingPlugin added |
+| Plugin dispatcher             | ✅ Done        | Basic plugin trait and PingPlugin implemented and integrated with daemon. |
 | Notification mirror           | ⬜ Not Started | Android notification listener     |
 | Media control                 | ⬜ Not Started | Spotify/VLC integration           |
 | Background service (Android)  | ⬜ Not Started | Long-lived connection             |

@@ -4,15 +4,20 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde_json;
+use plugins::{Plugin, PingPlugin};
 
 pub struct Daemon {
     paired_devices: Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
+    plugins: Arc<Vec<Box<dyn Plugin>>>,
 }
 
 impl Daemon {
     pub fn new() -> Self {
         Daemon {
             paired_devices: Arc::new(Mutex::new(HashMap::new())),
+            plugins: Arc::new(vec![
+                Box::new(PingPlugin),
+            ]),
         }
     }
 
@@ -24,12 +29,15 @@ impl Daemon {
         println!("Listening on {}", listener.local_addr()?);
 
         let paired_devices = self.paired_devices.clone();
+        let plugins = self.plugins.clone();
 
         loop {
             let (mut socket, addr) = listener.accept().await?;
             println!("New connection from {}", addr);
 
             let paired_devices_clone = paired_devices.clone();
+            let plugins_clone = plugins.clone();
+
             tokio::spawn(async move {
                 let mut buf = vec![0; 1024];
                 // In a real scenario, you'd handle messages, pairing, etc.
@@ -65,6 +73,18 @@ impl Daemon {
                             }
                         },
                         _ => {
+                            // Dispatch message to plugins
+                            let sender_id = DeviceId::from(addr.to_string()); // Placeholder for actual sender ID
+                            for plugin in plugins_clone.iter() {
+                                if let Some(response_message) = plugin.handle_message(&message, &sender_id) {
+                                    let response = serde_json::to_vec(&response_message)
+                                        .expect("Failed to serialize plugin response");
+                                    if let Err(e) = socket.write_all(&response).await {
+                                        eprintln!("failed to write to socket; err = {:?}", e);
+                                        return;
+                                    }
+                                }
+                            }
                             println!("Received unknown message: {:?}", message);
                         }
                     }
