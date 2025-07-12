@@ -127,7 +127,7 @@ libreconnect/
 | Shared types, protocols, plugin registry | ✅ Done        | Initial data structures defined   |
 | Device discovery (mDNS)       | ⏳ In Progress | Attempted `libmdns` integration, currently on hold. |
 | Daemon core                   | ✅ Done        | Basic structure and TCP listener added |
-| Secure pairing                | ⏳ In Progress | TLS cert exchange                 |
+| Secure pairing                | ✅ Done        | Basic auto-acceptance pairing implemented. |
 | Clipboard sync                | ⬜ Not Started |                                   |
 | File transfer                 | ⬜ Not Started |                                   |
 | Input share                   | ⬜ Not Started | PC input to Android over LAN      |

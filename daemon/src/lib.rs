@@ -1,14 +1,19 @@
 use shared::{DeviceId, DeviceInfo, DeviceType, Message};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use serde_json;
 
 pub struct Daemon {
-    // TODO: Add fields for device management, pairing, etc.
+    paired_devices: Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
 }
 
 impl Daemon {
     pub fn new() -> Self {
-        Daemon {}
+        Daemon {
+            paired_devices: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -18,10 +23,13 @@ impl Daemon {
         let listener = TcpListener::bind("127.0.0.1:8080").await?;
         println!("Listening on {}", listener.local_addr()?);
 
+        let paired_devices = self.paired_devices.clone();
+
         loop {
             let (mut socket, addr) = listener.accept().await?;
             println!("New connection from {}", addr);
 
+            let paired_devices_clone = paired_devices.clone();
             tokio::spawn(async move {
                 let mut buf = vec![0; 1024];
                 // In a real scenario, you'd handle messages, pairing, etc.
@@ -35,10 +43,30 @@ impl Daemon {
                         }
                     };
 
-                    // Echo back the data
-                    if let Err(e) = socket.write_all(&buf[0..n]).await {
-                        eprintln!("failed to write to socket; err = {:?}", e);
-                        return;
+                    let message: Message = serde_json::from_slice(&buf[0..n])
+                        .expect("Failed to deserialize message");
+
+                    match message {
+                        Message::RequestPairing(device_info) => {
+                            let response_message;
+                            {
+                                // Acquire lock, perform operations, and release lock within this scope
+                                let mut devices = paired_devices_clone.lock().unwrap();
+                                devices.insert(device_info.id.clone(), device_info.clone());
+                                println!("Paired devices: {:?}", devices);
+                                response_message = Message::PairingAccepted(device_info.id.clone());
+                            }
+                            
+                            let response = serde_json::to_vec(&response_message)
+                                .expect("Failed to serialize pairing accepted message");
+                            if let Err(e) = socket.write_all(&response).await {
+                                eprintln!("failed to write to socket; err = {:?}", e);
+                                return;
+                            }
+                        },
+                        _ => {
+                            println!("Received unknown message: {:?}", message);
+                        }
                     }
                 }
             });
