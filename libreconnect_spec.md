@@ -136,7 +136,7 @@ libreconnect/
 | CLI tool (`libreconnect-cli`) | ✅ Done        | Basic structure, command parsing, and PingDaemon interaction added. |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
 | Plugin dispatcher             | ✅ Done        | Basic plugin trait and PingPlugin implemented and integrated with daemon. |
-| Notification mirror           | ⬜ Not Started | Android notification listener     |
+| Notification mirror           | ✅ Done        | Basic Android UI implemented. |
 | Media control                 | ⬜ Not Started | Spotify/VLC integration           |
 | Background service (Android)  | ⬜ Not Started | Long-lived connection             |
 | Logging + debug mode          | ⬜ Not Started | Developer logs                    |

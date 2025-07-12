@@ -1,20 +1,16 @@
 package dev.libretools.connect
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,9 +18,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import dev.libretools.connect.ui.theme.LibreConnectTheme
 
 class MainActivity : ComponentActivity() {
@@ -33,136 +32,76 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LibreConnectTheme {
-                LibreConnectApp()
+                LibreConnectNavHost()
             }
         }
     }
 }
 
 @Composable
-fun LibreConnectApp(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+fun LibreConnectNavHost() {
+    val navController = rememberNavController()
+    NavHost(navController = navController, startDestination = "deviceList") {
+        composable("deviceList") {
+            DeviceListScreen(navController = navController)
+        }
+        composable("deviceDetail/{deviceId}") { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            DeviceDetailScreen(deviceId = deviceId, navController = navController)
+        }
+    }
+}
 
-    var daemonStatus by remember { mutableStateOf("Daemon Status: Not Started") }
-    var clipboardContent by remember { mutableStateOf("") }
-    var filePath by remember { mutableStateOf("") }
-    var fileTransferStatus by remember { mutableStateOf("File Transfer Status: Idle") }
-    var keyEventInput by remember { mutableStateOf("") }
-    var mouseEventAction by remember { mutableStateOf("") }
-    var mouseEventX by remember { mutableStateOf("0") }
-    var mouseEventY by remember { mutableStateOf("0") }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeviceListScreen(navController: NavController) {
+    val devices = remember { mutableStateOf(listOf("Device A", "Device B", "Device C")) }
 
-    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("LibreConnect Devices") })
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { /* TODO: Implement device discovery */ }) {
+                Icon(Icons.Filled.Add, "Add new device")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(modifier = Modifier.padding(innerPadding)) {
+            items(devices.value) { deviceName ->
+                ListItem(
+                    headlineContent = { Text(deviceName) },
+                    supportingContent = { Text("Status: Connected (Simulated)") },
+                    modifier = Modifier.clickable {
+                        navController.navigate("deviceDetail/$deviceName")
+                    }
+                )
+                Divider()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeviceDetailScreen(deviceId: String, navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Device: $deviceId") })
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = daemonStatus,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            Button(onClick = {
-                daemonStatus = "Daemon Status: Started (simulated)"
-            }) {
-                Text("Start Daemon")
-            }
-
-            TextField(
-                value = clipboardContent,
-                onValueChange = { clipboardContent = it },
-                label = { Text("Clipboard Content") },
-                modifier = Modifier.padding(top = 16.dp)
-            )
-
-            Button(onClick = {
-                val clip = ClipData.newPlainText("LibreConnect Clipboard", clipboardContent)
-                clipboardManager.setPrimaryClip(clip)
-                println("Set local clipboard: $clipboardContent")
-                // In a real app, this would send clipboardContent to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Set Local Clipboard")
-            }
-
-            Button(onClick = {
-                val item = clipboardManager.primaryClip?.getItemAt(0)
-                val text = item?.text?.toString() ?: ""
-                clipboardContent = text
-                println("Got local clipboard: $clipboardContent")
-                // In a real app, this would request clipboard from the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Get Local Clipboard")
-            }
-
-            TextField(
-                value = filePath,
-                onValueChange = { filePath = it },
-                label = { Text("File Path") },
-                modifier = Modifier.padding(top = 16.dp)
-            )
-
-            Button(onClick = {
-                fileTransferStatus = "Sending file: $filePath (simulated)"
-                println("Simulating sending file: $filePath")
-                // In a real app, this would send the file to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Send File")
-            }
-
-            Button(onClick = {
-                fileTransferStatus = "Receiving file (simulated)"
-                println("Simulating receiving file.")
-                // In a real app, this would request a file from the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Receive File")
-            }
-
-            Text(
-                text = fileTransferStatus,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-
-            TextField(
-                value = keyEventInput,
-                onValueChange = { keyEventInput = it },
-                label = { Text("Key Event (e.g., 'press A')") },
-                modifier = Modifier.padding(top = 16.dp)
-            )
-
-            Button(onClick = {
-                println("Simulating sending key event: $keyEventInput")
-                // In a real app, this would send the key event to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Send Key Event")
-            }
-
-            TextField(
-                value = mouseEventAction,
-                onValueChange = { mouseEventAction = it },
-                label = { Text("Mouse Action (e.g., 'move', 'press left')") },
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            TextField(
-                value = mouseEventX,
-                onValueChange = { mouseEventX = it },
-                label = { Text("Mouse X") },
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            TextField(
-                value = mouseEventY,
-                onValueChange = { mouseEventY = it },
-                label = { Text("Mouse Y") },
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            Button(onClick = {
-                println("Simulating sending mouse event: action=$mouseEventAction, x=$mouseEventX, y=$mouseEventY")
-                // In a real app, this would send the mouse event to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Send Mouse Event")
+            Text(text = "Details for $deviceId", style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { navController.popBackStack() }) {
+                Text("Back to Device List")
             }
         }
     }
@@ -170,8 +109,16 @@ fun LibreConnectApp(modifier: Modifier = Modifier) {
 
 @Preview(showBackground = true)
 @Composable
-fun LibreConnectAppPreview() {
+fun PreviewDeviceListScreen() {
     LibreConnectTheme {
-        LibreConnectApp()
+        DeviceListScreen(rememberNavController())
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PreviewDeviceDetailScreen() {
+    LibreConnectTheme {
+        DeviceDetailScreen("TestDevice", rememberNavController())
     }
 }
