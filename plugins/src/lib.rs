@@ -50,3 +50,36 @@ impl Plugin for ClipboardSyncPlugin {
         }
     }
 }
+
+pub struct FileTransferPlugin;
+
+impl Plugin for FileTransferPlugin {
+    fn name(&self) -> &'static str {
+        "file-transfer"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::FileTransferRequest { file_name, file_size } => {
+                println!("File transfer request from {}: {} ({} bytes)", sender_id, file_name, file_size);
+                // In a real scenario, you'd prepare to receive the file
+                None
+            },
+            Message::FileTransferChunk { file_name, chunk, offset } => {
+                println!("Received chunk for {} (offset: {}, size: {}) from {}", file_name, offset, chunk.len(), sender_id);
+                // In a real scenario, you'd write the chunk to the file
+                None
+            },
+            Message::FileTransferEnd { file_name } => {
+                println!("File transfer for {} ended from {}.", file_name, sender_id);
+                // In a real scenario, you'd finalize the file
+                None
+            },
+            Message::FileTransferError { file_name, error } => {
+                eprintln!("File transfer error for {} from {}: {}", file_name, sender_id, error);
+                None
+            },
+            _ => None,
+        }
+    }
+}

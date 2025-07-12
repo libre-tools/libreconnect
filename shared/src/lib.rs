@@ -47,6 +47,8 @@ pub enum Message {
     RequestClipboard,
     FileTransferRequest { file_name: String, file_size: u64 },
     FileTransferChunk { file_name: String, chunk: Vec<u8>, offset: u64 },
+    FileTransferEnd { file_name: String },
+    FileTransferError { file_name: String, error: String },
     Notification {
         title: String,
         body: String,
