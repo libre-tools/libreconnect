@@ -130,7 +130,7 @@ libreconnect/
 | Secure pairing                | ✅ Done        | Basic auto-acceptance pairing implemented. |
 | Clipboard sync                | ✅ Done        | CLI commands for setting and getting clipboard content added, and basic Android UI implemented. |
 | File transfer                 | ✅ Done        | CLI commands for sending files added, and basic Android UI implemented. |
-| Input share                   | ⬜ Not Started | PC input to Android over LAN      |
+| Input share                   | ⏳ In Progress | CLI commands for sending key and mouse events added. |
 | Mobile app (Android)          | ✅ Done        | Basic Jetpack Compose UI implemented (FFI simulated) |
 | Rust-Android FFI              | ⏸️ On Hold     | Complexities with cross-compilation and NDK integration. |
 | CLI tool (`libreconnect-cli`) | ✅ Done        | Basic structure, command parsing, and PingDaemon interaction added. |
