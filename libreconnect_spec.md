@@ -137,7 +137,7 @@ libreconnect/
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
 | Plugin dispatcher             | ✅ Done        | Basic plugin trait and PingPlugin implemented and integrated with daemon. |
 | Notification mirror           | ✅ Done        | Basic Android UI implemented. |
-| Media control                 | ⬜ Not Started | Spotify/VLC integration           |
+| Media control                 | ✅ Done        | Basic Android UI implemented. |
 | Background service (Android)  | ⬜ Not Started | Long-lived connection             |
 | Logging + debug mode          | ⬜ Not Started | Developer logs                    |
 
