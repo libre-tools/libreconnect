@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SendKeyEvent` and `SendMouseEvent` commands added to `cli` for input sharing.
 - Basic input sharing UI and logic implemented in Android app.
 - Basic notification mirroring UI and logic implemented in Android app.
-- Basic notification mirroring UI and logic implemented in Android app.
 - Basic media control UI and logic implemented in Android app.
 - Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 - Basic clipboard synchronization UI and logic implemented in Android app.
