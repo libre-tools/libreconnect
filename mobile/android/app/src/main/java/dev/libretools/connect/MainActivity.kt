@@ -48,6 +48,10 @@ fun LibreConnectApp(modifier: Modifier = Modifier) {
     var clipboardContent by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
     var fileTransferStatus by remember { mutableStateOf("File Transfer Status: Idle") }
+    var keyEventInput by remember { mutableStateOf("") }
+    var mouseEventAction by remember { mutableStateOf("") }
+    var mouseEventX by remember { mutableStateOf("0") }
+    var mouseEventY by remember { mutableStateOf("0") }
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(
@@ -120,6 +124,46 @@ fun LibreConnectApp(modifier: Modifier = Modifier) {
                 text = fileTransferStatus,
                 modifier = Modifier.padding(top = 16.dp)
             )
+
+            TextField(
+                value = keyEventInput,
+                onValueChange = { keyEventInput = it },
+                label = { Text("Key Event (e.g., 'press A')") },
+                modifier = Modifier.padding(top = 16.dp)
+            )
+
+            Button(onClick = {
+                println("Simulating sending key event: $keyEventInput")
+                // In a real app, this would send the key event to the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Send Key Event")
+            }
+
+            TextField(
+                value = mouseEventAction,
+                onValueChange = { mouseEventAction = it },
+                label = { Text("Mouse Action (e.g., 'move', 'press left')") },
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            TextField(
+                value = mouseEventX,
+                onValueChange = { mouseEventX = it },
+                label = { Text("Mouse X") },
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            TextField(
+                value = mouseEventY,
+                onValueChange = { mouseEventY = it },
+                label = { Text("Mouse Y") },
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            Button(onClick = {
+                println("Simulating sending mouse event: action=$mouseEventAction, x=$mouseEventX, y=$mouseEventY")
+                // In a real app, this would send the mouse event to the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Send Mouse Event")
+            }
         }
     }
 }
