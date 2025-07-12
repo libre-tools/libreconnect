@@ -138,6 +138,7 @@ libreconnect/
 | Plugin dispatcher             | ✅ Done        | Basic plugin trait and PingPlugin implemented and integrated with daemon. |
 | Notification mirror           | ✅ Done        | Basic Android UI implemented. |
 | Media control                 | ✅ Done        | Basic Android UI implemented. |
+| Touchpad mode                 | ✅ Done        | Basic Android UI implemented. |
 | Background service (Android)  | ⬜ Not Started | Long-lived connection             |
 | Logging + debug mode          | ⬜ Not Started | Developer logs                    |
 

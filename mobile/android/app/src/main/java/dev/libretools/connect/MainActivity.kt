@@ -112,6 +112,14 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
     var mediaControlStatus by remember { mutableStateOf("Media Control: Idle") }
     var remoteCommandInput by remember { mutableStateOf("") }
     var remoteCommandArgs by remember { mutableStateOf("") }
+    var touchpadX by remember { mutableStateOf("0.0f") }
+    var touchpadY by remember { mutableStateOf("0.0f") }
+    var touchpadDx by remember { mutableStateOf("0.0f") }
+    var touchpadDy by remember { mutableStateOf("0.0f") }
+    var touchpadScrollDx by remember { mutableStateOf("0.0f") }
+    var touchpadScrollDy by remember { mutableStateOf("0.0f") }
+    var touchpadLeftClick by remember { mutableStateOf(false) }
+    var touchpadRightClick by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -294,6 +302,60 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
                 // In a real app, this would send the remote command to the daemon
             }, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Send Remote Command")
+            }
+
+            // Touchpad Mode
+            Text(
+                text = "Touchpad Mode",
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            TextField(
+                value = touchpadX,
+                onValueChange = { touchpadX = it },
+                label = { Text("Touchpad X") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = touchpadY,
+                onValueChange = { touchpadY = it },
+                label = { Text("Touchpad Y") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = touchpadDx,
+                onValueChange = { touchpadDx = it },
+                label = { Text("Touchpad dX") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = touchpadDy,
+                onValueChange = { touchpadDy = it },
+                label = { Text("Touchpad dY") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = touchpadScrollDx,
+                onValueChange = { touchpadScrollDx = it },
+                label = { Text("Touchpad Scroll dX") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            TextField(
+                value = touchpadScrollDy,
+                onValueChange = { touchpadScrollDy = it },
+                label = { Text("Touchpad Scroll dY") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                Checkbox(checked = touchpadLeftClick, onCheckedChange = { touchpadLeftClick = it })
+                Text("Left Click")
+                Checkbox(checked = touchpadRightClick, onCheckedChange = { touchpadRightClick = it })
+                Text("Right Click")
+            }
+            Button(onClick = {
+                println("Simulating touchpad event: x=$touchpadX, y=$touchpadY, dx=$touchpadDx, dy=$touchpadDy, scrollDx=$touchpadScrollDx, scrollDy=$touchpadScrollDy, leftClick=$touchpadLeftClick, rightClick=$touchpadRightClick")
+                // In a real app, this would send the touchpad event to the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Send Touchpad Event")
             }
 
             Spacer(Modifier.height(16.dp))

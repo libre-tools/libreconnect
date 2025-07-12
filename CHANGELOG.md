@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic media control UI and logic implemented in Android app.
 - `SendRemoteCommand` added to `cli` for remote command execution.
 - Basic remote command UI and logic implemented in Android app.
+- Basic touchpad mode UI and logic implemented in Android app.
 - Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 - Basic clipboard synchronization UI and logic implemented in Android app.
 - Basic auto-acceptance pairing implemented in `daemon` crate.
