@@ -1,0 +1,36 @@
+# Ignore compiled Rust binaries and dependencies
+/target/
+
+# Ignore IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Ignore Android specific files
+/mobile/android/build/
+/mobile/android/.gradle/
+/mobile/android/local.properties
+/mobile/android/.cxx/
+/mobile/android/captures/
+/mobile/android/app/build/
+
+# Ignore common OS-generated files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+*~
+*.swp
+*.bak
+*.log
+
+# Ignore Cargo generated files (already committed, but good to have)
+Cargo.lock
+
+# Ignore any future node_modules if web components are added
+node_modules/
+
+# Ignore LibreConnect specific generated files
+libreconnect_spec.md.bak
