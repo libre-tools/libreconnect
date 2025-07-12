@@ -128,7 +128,7 @@ libreconnect/
 | Device discovery (mDNS)       | ⏳ In Progress | Attempted `libmdns` integration, currently on hold. |
 | Daemon core                   | ✅ Done        | Basic structure and TCP listener added |
 | Secure pairing                | ✅ Done        | Basic auto-acceptance pairing implemented. |
-| Clipboard sync                | ⏳ In Progress | CLI commands for setting and getting clipboard content added. |
+| Clipboard sync                | ✅ Done        | CLI commands for setting and getting clipboard content added, and basic Android UI implemented. |
 | File transfer                 | ⬜ Not Started |                                   |
 | Input share                   | ⬜ Not Started | PC input to Android over LAN      |
 | Mobile app (Android)          | ✅ Done        | Basic Jetpack Compose UI implemented (FFI simulated) |
