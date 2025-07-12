@@ -61,7 +61,7 @@ All features are modular plugins communicating via a secure message bus.
 | `media-control`     | Control remote media playback                         |
 | Remote commands               | ✅ Done        | CLI commands for sending remote commands added, and basic Android UI implemented. |
 | `touchpad-mode`     | Use phone as touchpad or virtual keyboard             |
-| `slide-control`     | Use phone to control slideshows or presentations      |
+| Slide control                 | ⏳ In Progress | CLI commands for slide control actions added. |
 
 ---
 
