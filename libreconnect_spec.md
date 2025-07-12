@@ -124,6 +124,7 @@ libreconnect/
 | Task/Module                   | Status        | Notes                             |
 | ----------------------------- | ------------- | --------------------------------- |
 | Project scaffold              | ✅ Done        | Core repo structure               |
+| Shared types, protocols, plugin registry | ✅ Done        | Initial data structures defined   |
 | Device discovery (mDNS)       | ⏳ In Progress | Using `libmdns`                   |
 | Secure pairing                | ⏳ In Progress | TLS cert exchange                 |
 | Clipboard sync                | ⬜ Not Started |                                   |

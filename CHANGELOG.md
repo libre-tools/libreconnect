@@ -9,3 +9,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial project structure with Cargo workspace and Android project.
+- Initial data structures defined in `shared` crate.
