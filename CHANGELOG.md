@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic `Daemon` struct and TCP listener added to `daemon` crate.
 - Basic CLI structure and command parsing added to `cli` crate.
 - Basic `Plugin` trait and `PingPlugin` implementation added to `plugins` crate.
-- Basic Jetpack Compose UI implemented in Android project.
+- Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 
 ### Changed
 - mDNS integration in `daemon` crate temporarily put on hold due to library issues.
-- FFI setup with `cxx` in `daemon` crate reverted due to build complexities.
+- Rust-Android FFI integration put on hold due to build complexities; FFI is currently simulated in the Android app.
+
+### Removed
+- `android_ffi` crate.
