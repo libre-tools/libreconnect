@@ -134,7 +134,7 @@ libreconnect/
 | Mobile app (Android)          | ⬜ Not Started | Android base UI + permissions     |
 | CLI tool (`libreconnect-cli`) | ⏳ In Progress | Basic structure and command parsing added |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
-| Plugin dispatcher             | ⬜ Not Started | Plugin message routing in daemon  |
+| Plugin dispatcher             | ⏳ In Progress | Basic plugin trait and PingPlugin added |
 | Notification mirror           | ⬜ Not Started | Android notification listener     |
 | Media control                 | ⬜ Not Started | Spotify/VLC integration           |
 | Background service (Android)  | ⬜ Not Started | Long-lived connection             |

@@ -1,14 +1,24 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use shared::{Message, DeviceId};
+
+pub trait Plugin: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub struct PingPlugin;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+impl Plugin for PingPlugin {
+    fn name(&self) -> &'static str {
+        "ping"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::Ping => {
+                println!("Ping received from {}. Sending Pong.", sender_id);
+                Some(Message::Pong)
+            },
+            _ => None,
+        }
     }
 }
