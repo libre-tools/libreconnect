@@ -30,7 +30,7 @@
 
 ### 1. `libreconnectd` (Rust)
 
-- Background daemon for peer discovery, pairing, plugin execution, encrypted communication
+| Background daemon for peer discovery, pairing, plugin execution, encrypted communication | ⏳ In Progress | Basic structure and TCP listener added |
 
 ### 2. `libreconnect-cli` (Rust)
 
@@ -126,6 +126,7 @@ libreconnect/
 | Project scaffold              | ✅ Done        | Core repo structure               |
 | Shared types, protocols, plugin registry | ✅ Done        | Initial data structures defined   |
 | Device discovery (mDNS)       | ⏳ In Progress | Using `libmdns`                   |
+| Daemon core                   | ⏳ In Progress | Basic structure and TCP listener added |
 | Secure pairing                | ⏳ In Progress | TLS cert exchange                 |
 | Clipboard sync                | ⬜ Not Started |                                   |
 | File transfer                 | ⬜ Not Started |                                   |
