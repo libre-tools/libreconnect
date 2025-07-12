@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde_json;
-use plugins::{Plugin, PingPlugin, ClipboardSyncPlugin, FileTransferPlugin, InputSharePlugin, NotificationSyncPlugin};
+use plugins::{Plugin, PingPlugin, ClipboardSyncPlugin, FileTransferPlugin, InputSharePlugin, NotificationSyncPlugin, MediaControlPlugin};
 
 pub struct Daemon {
     paired_devices: Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
@@ -21,6 +21,7 @@ impl Daemon {
                 Box::new(FileTransferPlugin),
                 Box::new(InputSharePlugin),
                 Box::new(NotificationSyncPlugin),
+                Box::new(MediaControlPlugin),
             ]),
         }
     }

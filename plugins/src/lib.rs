@@ -1,4 +1,4 @@
-use shared::{Message, DeviceId, KeyEvent, MouseEvent};
+use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
@@ -120,6 +120,25 @@ impl Plugin for NotificationSyncPlugin {
             Message::Notification { title, body, app_name } => {
                 println!("Notification from {}: Title=\"{}\", Body=\"{}\", App={:?}", sender_id, title, body, app_name);
                 // In a real scenario, you'd display the notification
+                None
+            },
+            _ => None,
+        }
+    }
+}
+
+pub struct MediaControlPlugin;
+
+impl Plugin for MediaControlPlugin {
+    fn name(&self) -> &'static str {
+        "media-control"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::MediaControl { action } => {
+                println!("Media control action from {}: {:?}", sender_id, action);
+                // In a real scenario, you'd send the media control command to the system
                 None
             },
             _ => None,
