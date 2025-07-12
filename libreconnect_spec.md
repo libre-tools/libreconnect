@@ -59,7 +59,7 @@ All features are modular plugins communicating via a secure message bus.
 | `notification-sync` | Mirror Android notifications                          |
 | `battery-status`    | Show mobile battery level                             |
 | `media-control`     | Control remote media playback                         |
-| `remote-commands`   | Execute pre-defined shell commands remotely           |
+| Remote commands               | ✅ Done        | CLI commands for sending remote commands added. |
 | `touchpad-mode`     | Use phone as touchpad or virtual keyboard             |
 | `slide-control`     | Use phone to control slideshows or presentations      |
 
