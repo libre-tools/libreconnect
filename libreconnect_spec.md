@@ -131,7 +131,7 @@ libreconnect/
 | Clipboard sync                | ⬜ Not Started |                                   |
 | File transfer                 | ⬜ Not Started |                                   |
 | Input share                   | ⬜ Not Started | PC input to Android over LAN      |
-| Mobile app (Android)          | ⏳ In Progress | FFI setup with `cxx` initiated    |
+| Mobile app (Android)          | ⬜ Not Started | Android base UI + permissions     |
 | CLI tool (`libreconnect-cli`) | ⏳ In Progress | Basic structure and command parsing added |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
 | Plugin dispatcher             | ⏳ In Progress | Basic plugin trait and PingPlugin added |
