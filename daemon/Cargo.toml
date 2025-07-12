@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cxx = "1.0.160"
 futures = "0.3.31"
 libmdns = "0.9.1"
 quinn = "0.11.8"
@@ -12,3 +13,6 @@ rustls = "0.23.29"
 serde = { version = "1.0.219", features = ["derive"] }
 shared = { version = "0.1.0", path = "../shared" }
 tokio = { version = "1.46.1", features = ["full"] }
+
+[build-dependencies]
+cxx-build = "1.0.160"
