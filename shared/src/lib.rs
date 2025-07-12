@@ -44,6 +44,7 @@ pub enum Message {
     PairingRejected(DeviceId),
     // Plugin messages (examples)
     ClipboardSync(String),
+    RequestClipboard,
     FileTransferRequest { file_name: String, file_size: u64 },
     FileTransferChunk { file_name: String, chunk: Vec<u8>, offset: u64 },
     Notification {
