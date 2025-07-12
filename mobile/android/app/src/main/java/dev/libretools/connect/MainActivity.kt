@@ -120,6 +120,7 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
     var touchpadScrollDy by remember { mutableStateOf("0.0f") }
     var touchpadLeftClick by remember { mutableStateOf(false) }
     var touchpadRightClick by remember { mutableStateOf(false) }
+    var slideControlStatus by remember { mutableStateOf("Slide Control: Idle") }
 
     Scaffold(
         topBar = {
@@ -357,6 +358,24 @@ fun DeviceDetailScreen(deviceId: String, navController: NavController) {
             }, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Send Touchpad Event")
             }
+
+            // Slide Control
+            Text(
+                text = "Slide Control",
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                Button(onClick = { slideControlStatus = "Slide Control: Next Slide (simulated)" }) { Text("Next Slide") }
+                Button(onClick = { slideControlStatus = "Slide Control: Previous Slide (simulated)" }) { Text("Previous Slide") }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                Button(onClick = { slideControlStatus = "Slide Control: Start Presentation (simulated)" }) { Text("Start Presentation") }
+                Button(onClick = { slideControlStatus = "Slide Control: End Presentation (simulated)" }) { Text("End Presentation") }
+            }
+            Text(
+                text = slideControlStatus,
+                modifier = Modifier.padding(top = 8.dp)
+            )
 
             Spacer(Modifier.height(16.dp))
             Button(onClick = { navController.popBackStack() }) {

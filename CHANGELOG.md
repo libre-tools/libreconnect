@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic remote command UI and logic implemented in Android app.
 - Basic touchpad mode UI and logic implemented in Android app.
 - `SendSlideControl` command added to `cli` for slide control.
+- Basic slide control UI and logic implemented in Android app.
 - Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 - Basic clipboard synchronization UI and logic implemented in Android app.
 - Basic auto-acceptance pairing implemented in `daemon` crate.
