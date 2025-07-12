@@ -57,6 +57,7 @@ pub enum Message {
         app_name: Option<String>,
     },
     MediaControl { action: MediaControlAction },
+    BatteryStatus(BatteryStatus),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -106,6 +107,12 @@ pub struct MouseEvent {
     pub y: i32,
     pub button: Option<MouseButton>,
     pub scroll_delta: Option<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BatteryStatus {
+    pub charge: f32,
+    pub is_charging: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

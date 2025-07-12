@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use shared::{DeviceId, Message, KeyAction, KeyCode, KeyEvent, MouseAction, MouseButton, MouseEvent};
+use shared::{DeviceId, Message, KeyAction, KeyCode, KeyEvent, MouseAction, MouseButton, MouseEvent, MediaControlAction, BatteryStatus};
 use serde_json;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt as TokioAsyncReadExt;
@@ -66,6 +66,30 @@ enum Commands {
         /// Scroll delta (for Scroll)
         #[arg(long)]
         scroll_delta: Option<f32>,
+    },
+    /// Send a notification to a device
+    SendNotification {
+        /// The ID of the target device
+        device_id: String,
+        /// The title of the notification
+        title: String,
+        /// The body of the notification
+        body: String,
+        /// Optional: The app name sending the notification
+        #[arg(long)]
+        app_name: Option<String>,
+    },
+    /// Send a media control command to a device
+    SendMediaControl {
+        /// The ID of the target device
+        device_id: String,
+        /// The media control action (Play, Pause, Next, Previous, etc.)
+        action: String,
+    },
+    /// Get battery status from a device
+    GetBatteryStatus {
+        /// The ID of the target device
+        device_id: String,
     },
 }
 
@@ -224,6 +248,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
             stream.write_all(&message).await?;
             println!("Mouse event sent.");
+        },
+        Commands::SendNotification { device_id, title, body, app_name } => {
+            println!("Sending notification to device {}: title=\"{}\", body=\"{}\", app_name={:?}", device_id, title, body, app_name);
+            let message = serde_json::to_vec(&Message::Notification { title: title.clone(), body: body.clone(), app_name: app_name.clone() })?;
+            let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
+            stream.write_all(&message).await?;
+            println!("Notification sent.");
+        },
+        Commands::SendMediaControl { device_id, action } => {
+            println!("Sending media control to device {}: action={}", device_id, action);
+            let media_action = match action.as_str() {
+                "play" => MediaControlAction::Play,
+                "pause" => MediaControlAction::Pause,
+                "playpause" => MediaControlAction::PlayPause,
+                "next" => MediaControlAction::Next,
+                "previous" => MediaControlAction::Previous,
+                "volumeup" => MediaControlAction::VolumeUp,
+                "volumedown" => MediaControlAction::VolumeDown,
+                "togglemute" => MediaControlAction::ToggleMute,
+                _ => return Err(format!("Invalid media control action: {}", action).into()),
+            };
+            let message = serde_json::to_vec(&Message::MediaControl { action: media_action })?;
+            let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
+            stream.write_all(&message).await?;
+            println!("Media control sent.");
+        },
+        Commands::GetBatteryStatus { device_id } => {
+            println!("Requesting battery status from device {}.", device_id);
+            let message = serde_json::to_vec(&Message::BatteryStatus(shared::BatteryStatus { charge: 0.0, is_charging: false }))?;
+            let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
+            stream.write_all(&message).await?;
+            println!("Battery status request sent.");
         },
     }
 

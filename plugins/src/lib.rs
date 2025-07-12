@@ -1,4 +1,4 @@
-use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction};
+use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction, BatteryStatus};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
@@ -139,6 +139,25 @@ impl Plugin for MediaControlPlugin {
             Message::MediaControl { action } => {
                 println!("Media control action from {}: {:?}", sender_id, action);
                 // In a real scenario, you'd send the media control command to the system
+                None
+            },
+            _ => None,
+        }
+    }
+}
+
+pub struct BatteryStatusPlugin;
+
+impl Plugin for BatteryStatusPlugin {
+    fn name(&self) -> &'static str {
+        "battery-status"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::BatteryStatus(status) => {
+                println!("Battery status from {}: Charge={}%, Charging={}", sender_id, status.charge, status.is_charging);
+                // In a real scenario, you'd update the local battery status display
                 None
             },
             _ => None,
