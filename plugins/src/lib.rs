@@ -1,4 +1,4 @@
-use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction, BatteryStatus};
+use shared::{Message, DeviceId, KeyEvent, MouseEvent, MediaControlAction, BatteryStatus, TouchpadEvent};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
@@ -156,7 +156,7 @@ impl Plugin for BatteryStatusPlugin {
     fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
         match message {
             Message::BatteryStatus(status) => {
-                println!("Battery status from {}: Charge={}%, Charging={}", sender_id, status.charge, status.is_charging);
+                println!("Battery status from {}: Charge={}, Charging={}", sender_id, status.charge, status.is_charging);
                 // In a real scenario, you'd update the local battery status display
                 None
             },
@@ -177,6 +177,25 @@ impl Plugin for RemoteCommandsPlugin {
             Message::RemoteCommand { command, args } => {
                 println!("Remote command from {}: {} with args {:?}", sender_id, command, args);
                 // In a real scenario, you'd execute the command
+                None
+            },
+            _ => None,
+        }
+    }
+}
+
+pub struct TouchpadModePlugin;
+
+impl Plugin for TouchpadModePlugin {
+    fn name(&self) -> &'static str {
+        "touchpad-mode"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::TouchpadEvent(event) => {
+                println!("Touchpad event from {}: {:?}", sender_id, event);
+                // In a real scenario, you'd simulate the touchpad event
                 None
             },
             _ => None,

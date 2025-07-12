@@ -59,6 +59,7 @@ pub enum Message {
     MediaControl { action: MediaControlAction },
     BatteryStatus(BatteryStatus),
     RemoteCommand { command: String, args: Vec<String> },
+    TouchpadEvent(TouchpadEvent),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -126,6 +127,18 @@ pub enum MediaControlAction {
     VolumeUp,
     VolumeDown,
     ToggleMute,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TouchpadEvent {
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    pub scroll_delta_x: f32,
+    pub scroll_delta_y: f32,
+    pub is_left_click: bool,
+    pub is_right_click: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
