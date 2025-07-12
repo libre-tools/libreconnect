@@ -46,6 +46,8 @@ fun LibreConnectApp(modifier: Modifier = Modifier) {
 
     var daemonStatus by remember { mutableStateOf("Daemon Status: Not Started") }
     var clipboardContent by remember { mutableStateOf("") }
+    var filePath by remember { mutableStateOf("") }
+    var fileTransferStatus by remember { mutableStateOf("File Transfer Status: Idle") }
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(
@@ -90,6 +92,34 @@ fun LibreConnectApp(modifier: Modifier = Modifier) {
             }, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Get Local Clipboard")
             }
+
+            TextField(
+                value = filePath,
+                onValueChange = { filePath = it },
+                label = { Text("File Path") },
+                modifier = Modifier.padding(top = 16.dp)
+            )
+
+            Button(onClick = {
+                fileTransferStatus = "Sending file: $filePath (simulated)"
+                println("Simulating sending file: $filePath")
+                // In a real app, this would send the file to the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Send File")
+            }
+
+            Button(onClick = {
+                fileTransferStatus = "Receiving file (simulated)"
+                println("Simulating receiving file.")
+                // In a real app, this would request a file from the daemon
+            }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Receive File")
+            }
+
+            Text(
+                text = fileTransferStatus,
+                modifier = Modifier.padding(top = 16.dp)
+            )
         }
     }
 }
