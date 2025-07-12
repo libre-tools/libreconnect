@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic file transfer UI and logic implemented in Android app.
 - `SendKeyEvent` and `SendMouseEvent` commands added to `cli` for input sharing.
 - Basic input sharing UI and logic implemented in Android app.
+- Basic input sharing UI and logic implemented in Android app.
 - Basic `Plugin` trait and `PingPlugin` implementation added to `plugins` crate.
 - Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 - Basic clipboard synchronization UI and logic implemented in Android app.
