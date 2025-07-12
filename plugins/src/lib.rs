@@ -1,4 +1,4 @@
-use shared::{Message, DeviceId};
+use shared::{Message, DeviceId, KeyEvent, MouseEvent};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
@@ -77,6 +77,30 @@ impl Plugin for FileTransferPlugin {
             },
             Message::FileTransferError { file_name, error } => {
                 eprintln!("File transfer error for {} from {}: {}", file_name, sender_id, error);
+                None
+            },
+            _ => None,
+        }
+    }
+}
+
+pub struct InputSharePlugin;
+
+impl Plugin for InputSharePlugin {
+    fn name(&self) -> &'static str {
+        "input-share"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::KeyEvent(key_event) => {
+                println!("Key event from {}: {:?}", sender_id, key_event);
+                // In a real scenario, you'd simulate the key event
+                None
+            },
+            Message::MouseEvent(mouse_event) => {
+                println!("Mouse event from {}: {:?}", sender_id, mouse_event);
+                // In a real scenario, you'd simulate the mouse event
                 None
             },
             _ => None,
