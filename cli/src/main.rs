@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use shared::{DeviceId, DeviceInfo, DeviceType, Message};
+use serde_json;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -14,6 +15,8 @@ struct Cli {
 enum Commands {
     /// Start the LibreConnect daemon
     StartDaemon,
+    /// Send a ping to the daemon
+    PingDaemon,
     /// List connected devices
     ListDevices,
     /// Send a file to a device
@@ -39,9 +42,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &cli.command {
         Commands::StartDaemon => {
             println!("Attempting to start daemon...");
-            // In a real scenario, you'd spawn the daemon process here
-            // For now, assume it's running or will be started externally.
             println!("Daemon assumed to be running or starting.");
+        },
+        Commands::PingDaemon => {
+            println!("Sending Ping to daemon...");
+            let mut stream = TcpStream::connect("127.0.0.1:8080").await?;
+            let ping_message = serde_json::to_vec(&Message::Ping)?;
+            stream.write_all(&ping_message).await?;
+
+            let mut buffer = vec![0; 1024];
+            let n = stream.read(&mut buffer).await?;
+            let response_message: Message = serde_json::from_slice(&buffer[0..n])?;
+
+            match response_message {
+                Message::Pong => println!("Received Pong from daemon!"),
+                _ => println!("Received unexpected response: {:?}", response_message),
+            }
         },
         Commands::ListDevices => {
             println!("Listing devices...");

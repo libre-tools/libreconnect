@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial data structures defined in `shared` crate.
 - Basic `Daemon` struct and TCP listener added to `daemon` crate.
 - Basic CLI structure and command parsing added to `cli` crate.
+- `PingDaemon` command added to `cli` for daemon interaction.
 - Basic `Plugin` trait and `PingPlugin` implementation added to `plugins` crate.
 - Basic Jetpack Compose UI implemented in Android project (FFI simulated).
 - Basic auto-acceptance pairing implemented in `daemon` crate.

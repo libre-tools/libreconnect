@@ -133,7 +133,7 @@ libreconnect/
 | Input share                   | ⬜ Not Started | PC input to Android over LAN      |
 | Mobile app (Android)          | ✅ Done        | Basic Jetpack Compose UI implemented (FFI simulated) |
 | Rust-Android FFI              | ⏸️ On Hold     | Complexities with cross-compilation and NDK integration. |
-| CLI tool (`libreconnect-cli`) | ⏳ In Progress | Basic structure and command parsing added |
+| CLI tool (`libreconnect-cli`) | ✅ Done        | Basic structure, command parsing, and PingDaemon interaction added. |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
 | Plugin dispatcher             | ✅ Done        | Basic plugin trait and PingPlugin implemented and integrated with daemon. |
 | Notification mirror           | ⬜ Not Started | Android notification listener     |
