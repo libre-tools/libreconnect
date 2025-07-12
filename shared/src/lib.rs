@@ -58,6 +58,7 @@ pub enum Message {
     },
     MediaControl { action: MediaControlAction },
     BatteryStatus(BatteryStatus),
+    RemoteCommand { command: String, args: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

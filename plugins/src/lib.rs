@@ -164,3 +164,22 @@ impl Plugin for BatteryStatusPlugin {
         }
     }
 }
+
+pub struct RemoteCommandsPlugin;
+
+impl Plugin for RemoteCommandsPlugin {
+    fn name(&self) -> &'static str {
+        "remote-commands"
+    }
+
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+        match message {
+            Message::RemoteCommand { command, args } => {
+                println!("Remote command from {}: {} with args {:?}", sender_id, command, args);
+                // In a real scenario, you'd execute the command
+                None
+            },
+            _ => None,
+        }
+    }
+}
