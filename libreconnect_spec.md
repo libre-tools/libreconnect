@@ -132,7 +132,7 @@ libreconnect/
 | File transfer                 | ⬜ Not Started |                                   |
 | Input share                   | ⬜ Not Started | PC input to Android over LAN      |
 | Mobile app (Android)          | ⬜ Not Started | Android base UI + permissions     |
-| CLI tool (`libreconnect-cli`) | ⬜ Not Started | Pairing, file send, device list   |
+| CLI tool (`libreconnect-cli`) | ⏳ In Progress | Basic structure and command parsing added |
 | GUI (Tauri)                   | ⬜ Not Started | System tray, plugin toggles, logs |
 | Plugin dispatcher             | ⬜ Not Started | Plugin message routing in daemon  |
 | Notification mirror           | ⬜ Not Started | Android notification listener     |
