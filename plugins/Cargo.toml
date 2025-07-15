@@ -6,3 +6,12 @@ edition = "2024"
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
 shared = { version = "0.1.0", path = "../shared" }
+tokio = { version = "1.46.1", features = ["full"] }
+# System integration dependencies
+arboard = "3.2"  # Cross-platform clipboard access
+enigo = "0.2"    # Cross-platform input simulation
+notify-rust = "4.10"  # Cross-platform notifications
+souvlaki = "0.7"  # Cross-platform media controls
+battery = "0.7"   # Battery status monitoring
+sysinfo = "0.30"  # System information
+dirs = "5.0"      # Standard directories
