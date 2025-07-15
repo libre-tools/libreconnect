@@ -18,16 +18,27 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DevicesScreen(navController: NavController, devices: List<Device>) {
+fun DevicesScreen(
+        navController: NavController,
+        devices: List<Device>,
+        connectionStatus: String = "Ready"
+) {
     Scaffold(
             topBar = {
                 TopAppBar(
                         title = {
-                            Text(
-                                    "Devices",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                            )
+                            Column {
+                                Text(
+                                        "Devices",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                        connectionStatus,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         },
                         actions = {
                             IconButton(onClick = { navController.navigate("settings") }) {
@@ -117,7 +128,10 @@ fun EmptyDevicesState(onDiscoverClick: () -> Unit, modifier: Modifier = Modifier
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiscoverScreen(navController: NavController) {
+fun DiscoverScreen(
+        navController: NavController,
+        serviceConnection: dev.libretools.connect.service.LibreConnectServiceConnection? = null
+) {
     var isScanning by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -206,14 +220,16 @@ fun DiscoverScreen(navController: NavController) {
                             Button(
                                     onClick = {
                                         isScanning = true
-                                        // Simulate scanning
+                                        // Start actual device discovery
+                                        serviceConnection?.startDeviceDiscovery()
+                                        // Simulate scanning completion for UI
                                         Timer().schedule(
                                                         object : TimerTask() {
                                                             override fun run() {
                                                                 isScanning = false
                                                             }
                                                         },
-                                                        3000
+                                                        5000
                                                 )
                                     },
                                     modifier = Modifier.fillMaxWidth(),
