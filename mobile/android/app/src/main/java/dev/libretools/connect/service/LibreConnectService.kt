@@ -15,6 +15,8 @@ import androidx.core.app.NotificationCompat
 import dev.libretools.connect.MainActivity
 import dev.libretools.connect.R
 import dev.libretools.connect.data.Device
+import dev.libretools.connect.data.DeviceType
+import dev.libretools.connect.data.PluginCapability
 import dev.libretools.connect.network.DeviceDiscovery
 import dev.libretools.connect.network.NetworkManager
 import kotlinx.coroutines.*
@@ -192,6 +194,9 @@ class LibreConnectService : Service() {
 
                 // Start real device discovery
                 startDeviceDiscovery()
+
+                // Add manual test device for debugging
+                addManualTestDevice()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start LibreConnect service", e)
                 _connectionStatus.value = "Failed to start: ${e.message}"
@@ -271,6 +276,40 @@ class LibreConnectService : Service() {
 
     // Device discovery is now handled by real mDNS discovery
     // Mock devices removed - devices will be discovered automatically
+
+    private fun addManualTestDevice() {
+        // Add a manual test device with the known daemon IP for testing
+        val testDevice =
+                Device(
+                        id = "manual-test-192.168.1.7",
+                        name = "Desktop Daemon (Manual)",
+                        type = DeviceType.DESKTOP,
+                        isConnected = false,
+                        ipAddress = "192.168.1.7",
+                        port = 1716,
+                        capabilities =
+                                listOf(
+                                        PluginCapability.CLIPBOARD,
+                                        PluginCapability.FILE_TRANSFER,
+                                        PluginCapability.INPUT_SHARE,
+                                        PluginCapability.NOTIFICATIONS,
+                                        PluginCapability.MEDIA_CONTROL,
+                                        PluginCapability.BATTERY_STATUS,
+                                        PluginCapability.REMOTE_COMMANDS,
+                                        PluginCapability.TOUCHPAD,
+                                        PluginCapability.SLIDE_CONTROL
+                                )
+                )
+
+        val currentDevices = _discoveredDevices.value.toMutableList()
+        currentDevices.add(testDevice)
+        _discoveredDevices.value = currentDevices
+
+        Log.d(
+                TAG,
+                "Added manual test device: ${testDevice.name} at ${testDevice.ipAddress}:${testDevice.port}"
+        )
+    }
 
     // Public API for UI
     fun connectToDevice(deviceId: String) {
