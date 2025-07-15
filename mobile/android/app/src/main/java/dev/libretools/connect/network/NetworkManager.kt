@@ -7,10 +7,6 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class NetworkManager(
         private val onDeviceConnected: (Device) -> Unit,
@@ -25,37 +21,12 @@ class NetworkManager(
         private const val HEARTBEAT_INTERVAL = 30000L // 30 seconds
     }
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val protocolAdapter = ProtocolAdapter()
 
     // Active connections to devices
     private val activeConnections = ConcurrentHashMap<String, DeviceConnection>()
     private var isManagerActive = false
     private var heartbeatJob: Job? = null
-
-    @Serializable
-    data class NetworkMessage(
-            val type: String,
-            val payload: String,
-            val timestamp: Long = System.currentTimeMillis()
-    )
-
-    @Serializable
-    data class PluginMessage(
-            val plugin: String,
-            val action: String,
-            val data: Map<String, String> = emptyMap()
-    )
-
-    @Serializable
-    data class DeviceInfo(
-            val id: String,
-            val name: String,
-            val type: String,
-            val capabilities: List<String>
-    )
 
     private data class DeviceConnection(
             val device: Device,
@@ -107,39 +78,29 @@ class NetworkManager(
                 Log.d(TAG, "Connecting to ${device.name} at ${device.id}:$DEFAULT_PORT")
                 onConnectionStatusChanged("Connecting to ${device.name}...")
 
-                // For demo purposes, we'll simulate a connection
-                // In real implementation, you'd parse IP from device.id or use mDNS resolution
+                // Use real IP address and port from discovered device
+                val ipAddress =
+                        device.ipAddress
+                                ?: throw IllegalArgumentException("Device has no IP address")
+                val port = device.port ?: DEFAULT_PORT
+
+                Log.d(TAG, "Connecting to ${device.name} at $ipAddress:$port")
+
                 val socket = Socket()
-                socket.connect(
-                        java.net.InetSocketAddress("127.0.0.1", DEFAULT_PORT),
-                        CONNECTION_TIMEOUT
-                )
+                socket.connect(java.net.InetSocketAddress(ipAddress, port), CONNECTION_TIMEOUT)
                 socket.soTimeout = READ_TIMEOUT
 
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
 
-                // Send initial handshake
-                val handshake =
-                        NetworkMessage(
-                                type = "handshake",
-                                payload =
-                                        json.encodeToString(
-                                                DeviceInfo(
-                                                        id = "android-${android.os.Build.MODEL}",
-                                                        name = "Android Device",
-                                                        type = "mobile",
-                                                        capabilities =
-                                                                listOf(
-                                                                        "clipboard",
-                                                                        "notifications",
-                                                                        "file-transfer"
-                                                                )
-                                                )
-                                        )
-                        )
+                // Send initial device info handshake
+                val deviceId = "android-${android.os.Build.MODEL}-${System.currentTimeMillis()}"
+                val deviceName = "Android Device (${android.os.Build.MODEL})"
+                val handshakeMessage = protocolAdapter.createDeviceInfoMessage(deviceId, deviceName)
 
-                sendMessage(writer, handshake)
+                writer.write(handshakeMessage)
+                writer.newLine()
+                writer.flush()
 
                 // Start message listening job
                 val job =
@@ -158,18 +119,8 @@ class NetworkManager(
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to connect to ${device.name}", e)
                 onConnectionStatusChanged("Failed to connect to ${device.name}: ${e.message}")
-
-                // For demo purposes, simulate successful connection
-                simulateConnection(device)
             }
         }
-    }
-
-    // Temporary simulation for demo
-    private fun simulateConnection(device: Device) {
-        Log.d(TAG, "Simulating connection to ${device.name} for demo")
-        onDeviceConnected(device)
-        onConnectionStatusChanged("Simulated connection to ${device.name}")
     }
 
     suspend fun disconnectFromDevice(device: Device) {
@@ -179,9 +130,11 @@ class NetworkManager(
                 try {
                     Log.d(TAG, "Disconnecting from ${device.name}")
 
-                    // Send disconnect message
-                    val disconnectMessage = NetworkMessage(type = "disconnect", payload = "Goodbye")
-                    sendMessage(connection.writer, disconnectMessage)
+                    // Send ping to test connection before closing
+                    val pingMessage = protocolAdapter.createPingMessage()
+                    connection.writer.write(pingMessage)
+                    connection.writer.newLine()
+                    connection.writer.flush()
 
                     connection.job.cancel()
                     connection.socket.close()
@@ -195,28 +148,85 @@ class NetworkManager(
         }
     }
 
-    suspend fun sendPluginMessage(device: Device, pluginType: String, message: Map<String, Any>) {
+    suspend fun sendClipboardSync(device: Device, content: String) {
+        sendLibreConnectMessage(device, protocolAdapter.createClipboardSyncMessage(content))
+    }
+
+    suspend fun sendKeyEvent(device: Device, action: String, keyCode: String) {
+        sendLibreConnectMessage(device, protocolAdapter.createKeyEventMessage(action, keyCode))
+    }
+
+    suspend fun sendMouseEvent(
+            device: Device,
+            action: String,
+            x: Int,
+            y: Int,
+            button: String? = null,
+            scrollDelta: Int? = null
+    ) {
+        sendLibreConnectMessage(
+                device,
+                protocolAdapter.createMouseEventMessage(action, x, y, button, scrollDelta)
+        )
+    }
+
+    suspend fun sendTouchpadEvent(
+            device: Device,
+            x: Int,
+            y: Int,
+            dx: Int,
+            dy: Int,
+            scrollDeltaX: Int = 0,
+            scrollDeltaY: Int = 0,
+            isLeftClick: Boolean = false,
+            isRightClick: Boolean = false
+    ) {
+        sendLibreConnectMessage(
+                device,
+                protocolAdapter.createTouchpadEventMessage(
+                        x,
+                        y,
+                        dx,
+                        dy,
+                        scrollDeltaX,
+                        scrollDeltaY,
+                        isLeftClick,
+                        isRightClick
+                )
+        )
+    }
+
+    suspend fun sendMediaControl(device: Device, action: String) {
+        sendLibreConnectMessage(device, protocolAdapter.createMediaControlMessage(action))
+    }
+
+    suspend fun sendRemoteCommand(
+            device: Device,
+            command: String,
+            args: List<String> = emptyList()
+    ) {
+        sendLibreConnectMessage(device, protocolAdapter.createRemoteCommandMessage(command, args))
+    }
+
+    suspend fun sendSlideControl(device: Device, action: String) {
+        sendLibreConnectMessage(device, protocolAdapter.createSlideControlMessage(action))
+    }
+
+    suspend fun requestClipboard(device: Device) {
+        sendLibreConnectMessage(device, protocolAdapter.createClipboardRequestMessage())
+    }
+
+    private suspend fun sendLibreConnectMessage(device: Device, message: String) {
         withContext(Dispatchers.IO) {
             val connection = activeConnections[device.id]
             if (connection != null) {
                 try {
-                    val pluginMessage =
-                            PluginMessage(
-                                    plugin = pluginType,
-                                    action = "execute",
-                                    data = message.mapValues { it.value.toString() }
-                            )
-
-                    val networkMessage =
-                            NetworkMessage(
-                                    type = "plugin",
-                                    payload = json.encodeToString(pluginMessage)
-                            )
-
-                    sendMessage(connection.writer, networkMessage)
-                    Log.d(TAG, "Sent plugin message to ${device.name}: $pluginType")
+                    connection.writer.write(message)
+                    connection.writer.newLine()
+                    connection.writer.flush()
+                    Log.d(TAG, "Sent message to ${device.name}")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send plugin message to ${device.name}", e)
+                    Log.e(TAG, "Failed to send message to ${device.name}", e)
                 }
             } else {
                 Log.w(TAG, "No active connection to ${device.name}")
@@ -230,10 +240,14 @@ class NetworkManager(
                 val line = reader.readLine() ?: break
 
                 try {
-                    val message = json.decodeFromString<NetworkMessage>(line)
-                    handleIncomingMessage(device, message)
+                    val parsedMessage = protocolAdapter.parseIncomingMessage(line)
+                    if (parsedMessage != null) {
+                        handleIncomingMessage(device, parsedMessage)
+                    } else {
+                        Log.w(TAG, "Failed to parse message from ${device.name}: $line")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse message from ${device.name}: $line", e)
+                    Log.e(TAG, "Error processing message from ${device.name}: $line", e)
                 }
             }
         } catch (e: IOException) {
@@ -244,53 +258,45 @@ class NetworkManager(
         }
     }
 
-    private fun handleIncomingMessage(device: Device, message: NetworkMessage) {
-        Log.d(TAG, "Received message from ${device.name}: ${message.type}")
+    private fun handleIncomingMessage(device: Device, message: ProtocolAdapter.ParsedMessage) {
+        Log.d(TAG, "Received message from ${device.name}: ${message::class.simpleName}")
 
-        when (message.type) {
-            "pong" -> {
-                Log.d(TAG, "Received pong from ${device.name}")
-            }
-            "plugin" -> {
-                try {
-                    val pluginMessage = json.decodeFromString<PluginMessage>(message.payload)
-                    handlePluginMessage(device, pluginMessage)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse plugin message", e)
+        when (message) {
+            is ProtocolAdapter.ParsedMessage.Ping -> {
+                // Respond with pong
+                val pongMessage = protocolAdapter.createPongMessage()
+                CoroutineScope(Dispatchers.IO).launch {
+                    sendLibreConnectMessage(device, pongMessage)
                 }
             }
-            "notification" -> {
-                handleNotificationMessage(device, message.payload)
+            is ProtocolAdapter.ParsedMessage.Pong -> {
+                Log.d(TAG, "Received pong from ${device.name}")
+            }
+            is ProtocolAdapter.ParsedMessage.ClipboardSync -> {
+                Log.d(TAG, "Clipboard sync from ${device.name}: ${message.content}")
+                // TODO: Update system clipboard
+            }
+            is ProtocolAdapter.ParsedMessage.RequestClipboard -> {
+                Log.d(TAG, "Clipboard request from ${device.name}")
+                // TODO: Send current clipboard content
+            }
+            is ProtocolAdapter.ParsedMessage.Notification -> {
+                Log.d(TAG, "Notification from ${device.name}: ${message.title}")
+                // TODO: Show system notification
+            }
+            is ProtocolAdapter.ParsedMessage.BatteryStatus -> {
+                Log.d(TAG, "Battery status from ${device.name}: ${message.charge}%")
+            }
+            is ProtocolAdapter.ParsedMessage.PairingAccepted -> {
+                Log.i(TAG, "Pairing accepted by ${device.name}")
+            }
+            is ProtocolAdapter.ParsedMessage.PairingRejected -> {
+                Log.w(TAG, "Pairing rejected by ${device.name}")
             }
             else -> {
-                Log.d(TAG, "Unknown message type: ${message.type}")
+                Log.d(TAG, "Unhandled message type: ${message::class.simpleName}")
             }
         }
-    }
-
-    private fun handlePluginMessage(device: Device, pluginMessage: PluginMessage) {
-        Log.d(
-                TAG,
-                "Plugin message from ${device.name}: ${pluginMessage.plugin} - ${pluginMessage.action}"
-        )
-
-        // Handle different plugin responses
-        when (pluginMessage.plugin) {
-            "clipboard" -> {
-                Log.d(TAG, "Clipboard data received: ${pluginMessage.data}")
-            }
-            "battery" -> {
-                Log.d(TAG, "Battery status received: ${pluginMessage.data}")
-            }
-            "media" -> {
-                Log.d(TAG, "Media control response: ${pluginMessage.data}")
-            }
-        }
-    }
-
-    private fun handleNotificationMessage(device: Device, payload: String) {
-        Log.d(TAG, "Notification from ${device.name}: $payload")
-        // TODO: Show system notification
     }
 
     private fun handleConnectionLost(device: Device) {
@@ -298,18 +304,6 @@ class NetworkManager(
         activeConnections.remove(device.id)
         onDeviceDisconnected(device)
         onConnectionStatusChanged("Connection lost to ${device.name}")
-    }
-
-    private fun sendMessage(writer: BufferedWriter, message: NetworkMessage) {
-        try {
-            val jsonString = json.encodeToString(message)
-            writer.write(jsonString)
-            writer.newLine()
-            writer.flush()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send message", e)
-            throw e
-        }
     }
 
     private fun startHeartbeat() {
@@ -326,8 +320,10 @@ class NetworkManager(
         val connections = activeConnections.values.toList()
         connections.forEach { connection ->
             try {
-                val pingMessage = NetworkMessage(type = "ping", payload = "heartbeat")
-                sendMessage(connection.writer, pingMessage)
+                val pingMessage = protocolAdapter.createPingMessage()
+                connection.writer.write(pingMessage)
+                connection.writer.newLine()
+                connection.writer.flush()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send heartbeat to ${connection.device.name}", e)
                 handleConnectionLost(connection.device)

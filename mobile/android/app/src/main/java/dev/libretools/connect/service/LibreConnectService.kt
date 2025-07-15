@@ -15,8 +15,6 @@ import androidx.core.app.NotificationCompat
 import dev.libretools.connect.MainActivity
 import dev.libretools.connect.R
 import dev.libretools.connect.data.Device
-import dev.libretools.connect.data.DeviceType
-import dev.libretools.connect.data.PluginCapability
 import dev.libretools.connect.network.DeviceDiscovery
 import dev.libretools.connect.network.NetworkManager
 import kotlinx.coroutines.*
@@ -77,6 +75,7 @@ class LibreConnectService : Service() {
 
         deviceDiscovery =
                 DeviceDiscovery(
+                        context = this,
                         onDeviceFound = { device -> handleDeviceDiscovered(device) },
                         onDeviceLost = { deviceId -> handleDeviceLost(deviceId) }
                 )
@@ -184,16 +183,15 @@ class LibreConnectService : Service() {
                 // Start network manager
                 networkManager.start()
 
-                // Start device discovery
-                deviceDiscovery.start()
+                // Device discovery will be started when startDeviceDiscovery() is called
 
                 _isServiceRunning.value = true
                 _connectionStatus.value = "Service Running"
 
                 Log.d(TAG, "LibreConnect service started successfully")
 
-                // Add some mock devices for demonstration
-                addMockDevices()
+                // Start real device discovery
+                startDeviceDiscovery()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start LibreConnect service", e)
                 _connectionStatus.value = "Failed to start: ${e.message}"
@@ -271,37 +269,8 @@ class LibreConnectService : Service() {
         updateNotification()
     }
 
-    // Temporary mock devices for demonstration
-    private fun addMockDevices() {
-        val mockDevices =
-                listOf(
-                        Device(
-                                id = "desktop-mock-1",
-                                name = "My Desktop PC",
-                                type = DeviceType.DESKTOP,
-                                isConnected = false,
-                                batteryLevel = null,
-                                capabilities = PluginCapability.values().toList()
-                        ),
-                        Device(
-                                id = "laptop-mock-1",
-                                name = "Work Laptop",
-                                type = DeviceType.LAPTOP,
-                                isConnected = false,
-                                batteryLevel = 67,
-                                isCharging = true,
-                                capabilities =
-                                        listOf(
-                                                PluginCapability.CLIPBOARD,
-                                                PluginCapability.FILE_TRANSFER,
-                                                PluginCapability.NOTIFICATIONS,
-                                                PluginCapability.MEDIA_CONTROL
-                                        )
-                        )
-                )
-
-        _discoveredDevices.value = mockDevices
-    }
+    // Device discovery is now handled by real mDNS discovery
+    // Mock devices removed - devices will be discovered automatically
 
     // Public API for UI
     fun connectToDevice(deviceId: String) {
@@ -329,7 +298,66 @@ class LibreConnectService : Service() {
             val device = _connectedDevices.value.find { it.id == deviceId }
             if (device != null) {
                 Log.d(TAG, "Sending plugin message to ${device.name}: $pluginType")
-                networkManager.sendPluginMessage(device, pluginType, message)
+
+                // Route to appropriate NetworkManager method based on plugin type
+                when (pluginType) {
+                    "clipboard" -> {
+                        val content = message["content"]?.toString() ?: ""
+                        networkManager.sendClipboardSync(device, content)
+                    }
+                    "input" -> {
+                        val action = message["action"]?.toString() ?: "press"
+                        val keyCode = message["keyCode"]?.toString() ?: ""
+                        networkManager.sendKeyEvent(device, action, keyCode)
+                    }
+                    "mouse" -> {
+                        val action = message["action"]?.toString() ?: "move"
+                        val x = message["x"]?.toString()?.toIntOrNull() ?: 0
+                        val y = message["y"]?.toString()?.toIntOrNull() ?: 0
+                        val button = message["button"]?.toString()
+                        val scrollDelta = message["scrollDelta"]?.toString()?.toIntOrNull()
+                        networkManager.sendMouseEvent(device, action, x, y, button, scrollDelta)
+                    }
+                    "touchpad" -> {
+                        val x = message["x"]?.toString()?.toIntOrNull() ?: 0
+                        val y = message["y"]?.toString()?.toIntOrNull() ?: 0
+                        val dx = message["dx"]?.toString()?.toIntOrNull() ?: 0
+                        val dy = message["dy"]?.toString()?.toIntOrNull() ?: 0
+                        val isLeftClick = message["isLeftClick"]?.toString()?.toBoolean() ?: false
+                        val isRightClick = message["isRightClick"]?.toString()?.toBoolean() ?: false
+                        networkManager.sendTouchpadEvent(
+                                device,
+                                x,
+                                y,
+                                dx,
+                                dy,
+                                0,
+                                0,
+                                isLeftClick,
+                                isRightClick
+                        )
+                    }
+                    "media" -> {
+                        val action = message["action"]?.toString() ?: "play"
+                        networkManager.sendMediaControl(device, action)
+                    }
+                    "remote" -> {
+                        val command = message["command"]?.toString() ?: ""
+                        val args =
+                                (message["args"] as? List<*>)?.mapNotNull { it?.toString() }
+                                        ?: emptyList()
+                        networkManager.sendRemoteCommand(device, command, args)
+                    }
+                    "slide" -> {
+                        val action = message["action"]?.toString() ?: "next"
+                        networkManager.sendSlideControl(device, action)
+                    }
+                    else -> {
+                        Log.w(TAG, "Unknown plugin type: $pluginType")
+                    }
+                }
+            } else {
+                Log.w(TAG, "Device not found: $deviceId")
             }
         }
     }

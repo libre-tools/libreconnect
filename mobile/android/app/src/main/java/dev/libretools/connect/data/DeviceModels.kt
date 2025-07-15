@@ -12,7 +12,9 @@ data class Device(
         val batteryLevel: Int? = null,
         val isCharging: Boolean = false,
         val lastSeen: Long = System.currentTimeMillis(),
-        val capabilities: List<PluginCapability> = emptyList()
+        val capabilities: List<PluginCapability> = emptyList(),
+        val ipAddress: String? = null,
+        val port: Int? = null
 )
 
 enum class DeviceType(val displayName: String, val icon: ImageVector) {
