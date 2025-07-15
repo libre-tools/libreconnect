@@ -206,7 +206,7 @@ impl Daemon {
     async fn start_tcp_server(
         &self,
     ) -> Result<tokio::task::JoinHandle<Result<(), DaemonError>>, DaemonError> {
-        let bind_addr = format!("127.0.0.1:{DEFAULT_PORT}");
+        let bind_addr = format!("0.0.0.0:{DEFAULT_PORT}");
         let listener = TcpListener::bind(&bind_addr)
             .await
             .map_err(|e| DaemonError::ServerStart(format!("Failed to bind to {bind_addr}: {e}")))?;

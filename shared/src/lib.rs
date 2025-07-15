@@ -675,7 +675,7 @@ impl PluginType {
 pub const PROTOCOL_VERSION: &str = "0.1.0";
 
 /// Default TCP port for LibreConnect daemon
-pub const DEFAULT_PORT: u16 = 8080;
+pub const DEFAULT_PORT: u16 = 1716;
 
 /// mDNS service type for LibreConnect discovery
 pub const MDNS_SERVICE_TYPE: &str = "_libreconnect._tcp.local.";
