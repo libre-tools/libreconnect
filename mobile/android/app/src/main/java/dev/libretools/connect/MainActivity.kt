@@ -1,402 +1,114 @@
 package dev.libretools.connect
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.* // Import all Material3 components
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.*
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.composables.icons.lucide.*
+import dev.libretools.connect.data.Device
+import dev.libretools.connect.data.DeviceType
+import dev.libretools.connect.data.PluginCapability
+import dev.libretools.connect.ui.screens.AboutScreen
+import dev.libretools.connect.ui.screens.DeviceDetailScreen
+import dev.libretools.connect.ui.screens.DevicesScreen
+import dev.libretools.connect.ui.screens.DiscoverScreen
+import dev.libretools.connect.ui.screens.PluginScreen
+import dev.libretools.connect.ui.screens.SettingsScreen
 import dev.libretools.connect.ui.theme.LibreConnectTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            LibreConnectTheme {
-                LibreConnectNavHost()
-            }
-        }
+        setContent { LibreConnectTheme { LibreConnectApp() } }
     }
 }
 
 @Composable
-fun LibreConnectNavHost() {
+fun LibreConnectApp() {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "deviceList") {
-        composable("deviceList") {
-            LibreConnectTheme {
-                DeviceListScreen(navController = navController)
-            }
-        }
-        composable("deviceDetail/{deviceId}") { backStackEntry ->
-            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
-            LibreConnectTheme {
-                DeviceDetailScreen(deviceId = deviceId, navController = navController)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DeviceListScreen(navController: NavController) {
-    val devices = remember { mutableStateOf(listOf("Device A", "Device B", "Device C")) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("LibreConnect Devices") })
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { /* TODO: Implement device discovery */ }) {
-                Icon(Icons.Filled.Add, "Add new device")
-            }
-        }
-    ) { innerPadding ->
-        LazyColumn(modifier = Modifier.padding(innerPadding)) { // Use LazyColumn for scrollable content
-            items(devices.value) { deviceName ->
-                ListItem(
-                    headlineContent = { Text(deviceName) },
-                    supportingContent = { Text("Status: Connected (Simulated)") },
-                    modifier = Modifier.clickable {
-                        navController.navigate("deviceDetail/$deviceName")
-                    }
+    val devices = remember {
+        mutableStateOf(
+                listOf(
+                        Device(
+                                "desktop-1",
+                                "My Desktop PC",
+                                DeviceType.DESKTOP,
+                                isConnected = true,
+                                batteryLevel = 85,
+                                isCharging = false,
+                                capabilities = PluginCapability.values().toList()
+                        ),
+                        Device(
+                                "laptop-1",
+                                "Work Laptop",
+                                DeviceType.LAPTOP,
+                                isConnected = false,
+                                batteryLevel = 42,
+                                isCharging = true,
+                                lastSeen = System.currentTimeMillis() - 300000,
+                                capabilities =
+                                        listOf(
+                                                PluginCapability.CLIPBOARD,
+                                                PluginCapability.FILE_TRANSFER,
+                                                PluginCapability.NOTIFICATIONS,
+                                                PluginCapability.MEDIA_CONTROL
+                                        )
+                        )
                 )
-                HorizontalDivider() // Use HorizontalDivider instead of Divider
-            }
-        }
+        )
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DeviceDetailScreen(deviceId: String, navController: NavController) {
-    val context = LocalContext.current
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
-    var daemonStatus by remember { mutableStateOf("Daemon Status: Not Started") }
-    var clipboardContent by remember { mutableStateOf("") }
-    var filePath by remember { mutableStateOf("") }
-    var fileTransferStatus by remember { mutableStateOf("File Transfer Status: Idle") }
-    var keyEventInput by remember { mutableStateOf("") }
-    var mouseEventAction by remember { mutableStateOf("") }
-    var mouseEventX by remember { mutableStateOf("0") }
-    var mouseEventY by remember { mutableStateOf("0") }
-    var notificationTitle by remember { mutableStateOf("") }
-    var notificationBody by remember { mutableStateOf("") }
-    var receivedNotification by remember { mutableStateOf("No new notifications") }
-    var mediaControlStatus by remember { mutableStateOf("Media Control: Idle") }
-    var remoteCommandInput by remember { mutableStateOf("") }
-    var remoteCommandArgs by remember { mutableStateOf("") }
-    var touchpadX by remember { mutableStateOf("0.0f") }
-    var touchpadY by remember { mutableStateOf("0.0f") }
-    var touchpadDx by remember { mutableStateOf("0.0f") }
-    var touchpadDy by remember { mutableStateOf("0.0f") }
-    var touchpadScrollDx by remember { mutableStateOf("0.0f") }
-    var touchpadScrollDy by remember { mutableStateOf("0.0f") }
-    var touchpadLeftClick by remember { mutableStateOf(false) }
-    var touchpadRightClick by remember { mutableStateOf(false) }
-    var slideControlStatus by remember { mutableStateOf("Slide Control: Idle") }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Device: $deviceId") })
+    NavHost(navController = navController, startDestination = "devices") {
+        composable("devices") {
+            DevicesScreen(navController = navController, devices = devices.value)
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()), // Make the column scrollable
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp) // Add spacing between elements
-        ) {
-            Text(text = "Details for $deviceId", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(16.dp))
 
-            // Daemon Status
-            Text(
-                text = daemonStatus,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Button(onClick = {
-                daemonStatus = "Daemon Status: Started (simulated)"
-            }) {
-                Text("Start Daemon")
-            }
+        composable("discover") { DiscoverScreen(navController = navController) }
 
-            // Clipboard Sync
-            TextField(
-                value = clipboardContent,
-                onValueChange = { clipboardContent = it },
-                label = { Text("Clipboard Content") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = {
-                    val clip = ClipData.newPlainText("LibreConnect Clipboard", clipboardContent)
-                    clipboardManager.setPrimaryClip(clip)
-                    println("Set local clipboard: $clipboardContent")
-                    // In a real app, this would send clipboardContent to the daemon
-                }) {
-                    Text("Set Local Clipboard")
-                }
-                Button(onClick = {
-                    val item = clipboardManager.primaryClip?.getItemAt(0)
-                    val text = item?.text?.toString() ?: ""
-                    clipboardContent = text
-                    println("Got local clipboard: $clipboardContent")
-                    // In a real app, this would request clipboard from the daemon
-                }) {
-                    Text("Get Local Clipboard")
-                }
-            }
-
-            // File Transfer
-            TextField(
-                value = filePath,
-                onValueChange = { filePath = it },
-                label = { Text("File Path") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = {
-                    fileTransferStatus = "Sending file: $filePath (simulated)"
-                    println("Simulating sending file: $filePath")
-                    // In a real app, this would send the file to the daemon
-                }) {
-                    Text("Send File")
-                }
-                Button(onClick = {
-                    fileTransferStatus = "Receiving file (simulated)"
-                    println("Simulating receiving file.")
-                    // In a real app, this would request a file from the daemon
-                }) {
-                    Text("Receive File")
-                }
-            }
-            Text(
-                text = fileTransferStatus,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            // Input Share
-            TextField(
-                value = keyEventInput,
-                onValueChange = { keyEventInput = it },
-                label = { Text("Key Event (e.g., 'press A')") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(onClick = {
-                println("Simulating sending key event: $keyEventInput")
-                // In a real app, this would send the key event to the daemon
-            }) {
-                Text("Send Key Event")
-            }
-
-            TextField(
-                value = mouseEventAction,
-                onValueChange = { mouseEventAction = it },
-                label = { Text("Mouse Action (e.g., 'move', 'press left')") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = mouseEventX,
-                onValueChange = { mouseEventX = it },
-                label = { Text("Mouse X") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = mouseEventY,
-                onValueChange = { mouseEventY = it },
-                label = { Text("Mouse Y") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(onClick = {
-                println("Simulating sending mouse event: action=$mouseEventAction, x=$mouseEventX, y=$mouseEventY")
-                // In a real app, this would send the mouse event to the daemon
-            }) {
-                Text("Send Mouse Event")
-            }
-
-            // Notification Mirroring
-            TextField(
-                value = notificationTitle,
-                onValueChange = { notificationTitle = it },
-                label = { Text("Notification Title") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = notificationBody,
-                onValueChange = { notificationBody = it },
-                label = { Text("Notification Body") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(onClick = {
-                println("Simulating sending notification: Title='$notificationTitle', Body='$notificationBody'")
-                // In a real app, this would send the notification to the daemon
-            }) {
-                Text("Send Notification")
-            }
-            Text(
-                text = receivedNotification,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            // Media Control
-            Text(
-                text = mediaControlStatus,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = { mediaControlStatus = "Media Control: Play (simulated)" }) { Text("Play") }
-                Button(onClick = { mediaControlStatus = "Media Control: Pause (simulated)" }) { Text("Pause") }
-                Button(onClick = { mediaControlStatus = "Media Control: Next (simulated)" }) { Text("Next") }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = { mediaControlStatus = "Media Control: Previous (simulated)" }) { Text("Previous") }
-                Button(onClick = { mediaControlStatus = "Media Control: Volume Up (simulated)" }) { Text("Vol Up") }
-                Button(onClick = { mediaControlStatus = "Media Control: Volume Down (simulated)" }) { Text("Vol Down") }
-            }
-            Button(onClick = { mediaControlStatus = "Media Control: Toggle Mute (simulated)" }) { Text("Toggle Mute") }
-
-            // Remote Commands
-            TextField(
-                value = remoteCommandInput,
-                onValueChange = { remoteCommandInput = it },
-                label = { Text("Remote Command") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = remoteCommandArgs,
-                onValueChange = { remoteCommandArgs = it },
-                label = { Text("Command Arguments (comma-separated)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(onClick = {
-                println("Simulating sending remote command: $remoteCommandInput with args $remoteCommandArgs")
-                // In a real app, this would send the remote command to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Send Remote Command")
-            }
-
-            // Touchpad Mode
-            Text(
-                text = "Touchpad Mode",
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            TextField(
-                value = touchpadX,
-                onValueChange = { touchpadX = it },
-                label = { Text("Touchpad X") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = touchpadY,
-                onValueChange = { touchpadY = it },
-                label = { Text("Touchpad Y") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = touchpadDx,
-                onValueChange = { touchpadDx = it },
-                label = { Text("Touchpad dX") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = touchpadDy,
-                onValueChange = { touchpadDy = it },
-                label = { Text("Touchpad dY") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = touchpadScrollDx,
-                onValueChange = { touchpadScrollDx = it },
-                label = { Text("Touchpad Scroll dX") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            TextField(
-                value = touchpadScrollDy,
-                onValueChange = { touchpadScrollDy = it },
-                label = { Text("Touchpad Scroll dY") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Checkbox(checked = touchpadLeftClick, onCheckedChange = { touchpadLeftClick = it })
-                Text("Left Click")
-                Checkbox(checked = touchpadRightClick, onCheckedChange = { touchpadRightClick = it })
-                Text("Right Click")
-            }
-            Button(onClick = {
-                println("Simulating touchpad event: x=$touchpadX, y=$touchpadY, dx=$touchpadDx, dy=$touchpadDy, scrollDx=$touchpadScrollDx, scrollDy=$touchpadScrollDy, leftClick=$touchpadLeftClick, rightClick=$touchpadRightClick")
-                // In a real app, this would send the touchpad event to the daemon
-            }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Send Touchpad Event")
-            }
-
-            // Slide Control
-            Text(
-                text = "Slide Control",
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = { slideControlStatus = "Slide Control: Next Slide (simulated)" }) { Text("Next Slide") }
-                Button(onClick = { slideControlStatus = "Slide Control: Previous Slide (simulated)" }) { Text("Previous Slide") }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Button(onClick = { slideControlStatus = "Slide Control: Start Presentation (simulated)" }) { Text("Start Presentation") }
-                Button(onClick = { slideControlStatus = "Slide Control: End Presentation (simulated)" }) { Text("End Presentation") }
-            }
-            Text(
-                text = slideControlStatus,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { navController.popBackStack() }) {
-                Text("Back to Device List")
+        composable(
+                "device/{deviceId}",
+                arguments = listOf(navArgument("deviceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            val device = devices.value.find { it.id == deviceId }
+            if (device != null) {
+                DeviceDetailScreen(device = device, navController = navController)
             }
         }
+
+        composable(
+                "plugin/{deviceId}/{pluginName}",
+                arguments =
+                        listOf(
+                                navArgument("deviceId") { type = NavType.StringType },
+                                navArgument("pluginName") { type = NavType.StringType }
+                        )
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            val pluginName = backStackEntry.arguments?.getString("pluginName") ?: return@composable
+            val device = devices.value.find { it.id == deviceId }
+            val plugin = PluginCapability.values().find { it.name == pluginName }
+
+            if (device != null && plugin != null) {
+                PluginScreen(device = device, plugin = plugin, navController = navController)
+            }
+        }
+
+        composable("settings") { SettingsScreen(navController = navController) }
+        composable("about") { AboutScreen(navController = navController) }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewDeviceListScreen() {
-    LibreConnectTheme {
-        DeviceListScreen(rememberNavController())
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewDeviceDetailScreen() {
-    LibreConnectTheme {
-        DeviceDetailScreen("TestDevice", rememberNavController())
-    }
+fun LibreConnectPreview() {
+    LibreConnectTheme { LibreConnectApp() }
 }
