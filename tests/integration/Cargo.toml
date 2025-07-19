@@ -1,0 +1,19 @@
+[package]
+name = "integration_tests"
+version = "0.1.0"
+edition = "2024"
+
+[dev-dependencies]
+tokio = { version = "1.46.1", features = ["full"] }
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.10"
+
+[dependencies]
+cli = { path = "../../cli", version = "0.1.0" }
+daemon = { path = "../../daemon" }
+shared = { path = "../../shared" }
+
+[[test]]
+name = "cli_daemon_integration"
+path = "cli_daemon_integration.rs"

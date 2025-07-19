@@ -21,9 +21,13 @@ import dev.libretools.connect.ui.screens.AboutScreen
 import dev.libretools.connect.ui.screens.DeviceDetailScreen
 import dev.libretools.connect.ui.screens.DevicesScreen
 import dev.libretools.connect.ui.screens.DiscoverScreen
+import dev.libretools.connect.ui.screens.PairingScreen
 import dev.libretools.connect.ui.screens.PluginScreen
 import dev.libretools.connect.ui.screens.SettingsScreen
 import dev.libretools.connect.ui.theme.LibreConnectTheme
+import androidx.compose.runtime.collectAsState
+import android.net.Uri
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +54,14 @@ class MainActivity : ComponentActivity() {
         setContent { LibreConnectTheme { LibreConnectApp(serviceConnection = serviceConnection) } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Force restart device discovery on app resume
+        lifecycleScope.launch {
+            serviceConnection.startDeviceDiscovery()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         lifecycle.removeObserver(serviceConnection)
@@ -60,39 +72,71 @@ class MainActivity : ComponentActivity() {
 fun LibreConnectApp(serviceConnection: LibreConnectServiceConnection) {
     val navController = rememberNavController()
 
-    // Collect devices from service
-    val discoveredDevices by
-            serviceConnection.discoveredDevices?.collectAsState()
-                    ?: remember { mutableStateOf(emptyList()) }
-    val connectedDevices by
-            serviceConnection.connectedDevices?.collectAsState()
-                    ?: remember { mutableStateOf(emptyList()) }
-    val connectionStatus by
-            serviceConnection.connectionStatus?.collectAsState()
-                    ?: remember { mutableStateOf("Initializing...") }
+    // DIRECT POLLING APPROACH - NO StateFlow delays
+    var discoveredDevices by remember { mutableStateOf<List<Device>>(emptyList()) }
+    var connectedDevices by remember { mutableStateOf<List<Device>>(emptyList()) }
+    val connectionStatus by serviceConnection.connectionStatus.collectAsState()
 
-    // Combine discovered and connected devices, prioritizing connected ones
-    val allDevices =
-            remember(discoveredDevices, connectedDevices) {
-                val deviceMap = mutableMapOf<String, Device>()
-
-                // Add discovered devices first
-                discoveredDevices.forEach { device -> deviceMap[device.id] = device }
-
-                // Update with connected devices (they override discovered ones)
-                connectedDevices.forEach { device ->
-                    deviceMap[device.id] = device.copy(isConnected = true)
+    // Direct polling every 500ms - guaranteed to work
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (serviceConnection.isServiceBound()) {
+                val service = serviceConnection.getService()
+                if (service != null) {
+                    // Direct access to service state - bypasses StateFlow completely
+                    val newDiscovered = service.discoveredDevices.value
+                    val newConnected = service.connectedDevices.value
+                    
+                    if (newDiscovered != discoveredDevices) {
+                        discoveredDevices = newDiscovered
+                        android.util.Log.d("MainActivity", "FORCED UI UPDATE: ${newDiscovered.size} devices")
+                    }
+                    if (newConnected != connectedDevices) {
+                        connectedDevices = newConnected
+                    }
                 }
-
-                deviceMap.values.toList()
+                serviceConnection.startDeviceDiscovery()
             }
+            delay(500)
+        }
+    }
+
+    // Auto-refresh discovered devices every 10 seconds for real-time updates
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(10000)
+            if (serviceConnection.isServiceBound()) {
+                serviceConnection.startDeviceDiscovery()
+            }
+        }
+    }
+
+    // Combine discovered and connected devices, WITHOUT auto-connection logic
+    val allDevices = remember(discoveredDevices, connectedDevices) {
+        val deviceMap = mutableMapOf<String, Device>()
+
+        // Add discovered devices first
+        discoveredDevices.forEach { device -> 
+            deviceMap[device.id] = device 
+        }
+
+        // Update with connected devices (they override discovered ones)
+        connectedDevices.forEach { device ->
+            deviceMap[device.id] = device.copy(isConnected = true)
+        }
+
+        deviceMap.values.toList()
+    }
+
+    // REMOVED: Auto-connection logic - pairing is now required
 
     NavHost(navController = navController, startDestination = "devices") {
         composable("devices") {
             DevicesScreen(
                     navController = navController,
                     devices = allDevices,
-                    connectionStatus = connectionStatus
+                    connectionStatus = connectionStatus,
+                    serviceConnection = serviceConnection
             )
         }
 
@@ -107,8 +151,16 @@ fun LibreConnectApp(serviceConnection: LibreConnectServiceConnection) {
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
             val device = allDevices.find { it.id == deviceId }
             if (device != null) {
-                DeviceDetailScreen(device = device, navController = navController)
+                DeviceDetailScreen(device = device, navController = navController, serviceConnection = serviceConnection)
             }
+        }
+        composable(
+                "pairing/{deviceId}",
+                arguments = listOf(navArgument("deviceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            val device = allDevices.find { it.id == deviceId }
+            PairingScreen(device = device, navController = navController, serviceConnection = serviceConnection)
         }
 
         composable(

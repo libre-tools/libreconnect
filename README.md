@@ -98,6 +98,25 @@ cargo run --bin libreconnect-cli -- send-slide-control device123 nextslide
 cargo run --bin libreconnect-cli -- send-remote-command device123 echo --args hello world
 ```
 
+## 📚 Documentation
+
+### For Users
+- **[Quick Start](#quick-start)** - Get up and running quickly
+- **[Android App Setup](./mobile/android/QUICKSTART.md)** - Mobile app installation and usage
+- **[CLI Reference](#using-the-cli)** - Command-line interface guide
+
+### For Developers & Maintainers
+- **[Maintenance Guide](./MAINTENANCE_GUIDE.md)** - **📖 Complete development, testing, and deployment guide**
+- **[Technical Specification](./libreconnect_spec.md)** - Detailed architecture and protocol documentation
+- **[Android Development](./mobile/android/README.md)** - Android-specific development guide
+
+### For Contributors
+- **[Contributing Guidelines](./MAINTENANCE_GUIDE.md#contributing)** - How to contribute to the project
+- **[Security Policy](./MAINTENANCE_GUIDE.md#security-considerations)** - Security practices and vulnerability reporting
+- **[Release Process](./MAINTENANCE_GUIDE.md#release-management)** - How releases are managed
+
+> 💡 **New to LibreConnect development?** Start with the **[Maintenance Guide](./MAINTENANCE_GUIDE.md)** for a comprehensive overview of the project structure, development setup, testing procedures, and contribution guidelines.
+
 ## 🧱 Tech Stack
 
 - **Core Engine:** Rust (`libreconnectd` daemon) with async/await and tokio

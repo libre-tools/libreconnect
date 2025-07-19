@@ -14,12 +14,15 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+mod enigo_utils;
+use enigo_utils::create_enigo_instance;
+
 // Import Enigo traits for input simulation
 use enigo::{Keyboard, Mouse};
 
 pub trait Plugin: Send + Sync {
     fn name(&self) -> &'static str;
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message>;
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>>;
 }
 
 pub struct PingPlugin;
@@ -29,17 +32,17 @@ impl Plugin for PingPlugin {
         "ping"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::Ping => {
                 println!("Ping received from {sender_id}. Sending Pong.");
-                Some(Message::Pong)
+                Ok(Some(Message::Pong))
             }
             Message::Pong => {
                 println!("Pong received from {sender_id}.");
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -75,37 +78,30 @@ impl Plugin for ClipboardSyncPlugin {
         "clipboard-sync"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::ClipboardSync(content) => {
                 println!("Clipboard content received from {sender_id}: {content}");
 
                 if let Ok(mut clipboard_guard) = self.clipboard.lock() {
                     if let Some(ref mut clipboard) = clipboard_guard.as_mut() {
-                        if let Err(e) = clipboard.set_text(content) {
-                            eprintln!("Failed to set clipboard content: {e}");
-                        }
+                        clipboard.set_text(content)?;
                     }
                 }
-                None
+                Ok(None)
             }
             Message::RequestClipboard => {
                 println!("Clipboard request received from {sender_id}.");
 
                 if let Ok(mut clipboard_guard) = self.clipboard.lock() {
                     if let Some(ref mut clipboard) = clipboard_guard.as_mut() {
-                        match clipboard.get_text() {
-                            Ok(content) => return Some(Message::ClipboardSync(content)),
-                            Err(e) => {
-                                eprintln!("Failed to get clipboard content: {e}");
-                                return Some(Message::ClipboardSync(String::new()));
-                            }
-                        }
+                        let content = clipboard.get_text()?;
+                        return Ok(Some(Message::ClipboardSync(content)));
                     }
                 }
-                Some(Message::ClipboardSync(String::new()))
+                Ok(Some(Message::ClipboardSync(String::new())))
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -148,7 +144,7 @@ impl Plugin for FileTransferPlugin {
         "file-transfer"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::FileTransferRequest {
                 file_name,
@@ -158,22 +154,12 @@ impl Plugin for FileTransferPlugin {
 
                 let file_path = Path::new(&self.download_dir).join(file_name);
 
-                match File::create(&file_path) {
-                    Ok(file) => {
-                        if let Ok(mut transfers) = self.active_transfers.lock() {
-                            transfers.insert(file_name.clone(), file);
-                        }
-                        println!("Ready to receive file: {}", file_path.display());
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to create file {}: {}", file_path.display(), e);
-                        return Some(Message::FileTransferError {
-                            file_name: file_name.clone(),
-                            error: format!("Failed to create file: {e}"),
-                        });
-                    }
+                let file = File::create(&file_path)?;
+                if let Ok(mut transfers) = self.active_transfers.lock() {
+                    transfers.insert(file_name.clone(), file);
                 }
-                None
+                println!("Ready to receive file: {}", file_path.display());
+                Ok(None)
             }
             Message::FileTransferChunk {
                 file_name,
@@ -190,28 +176,12 @@ impl Plugin for FileTransferPlugin {
 
                 if let Ok(mut transfers) = self.active_transfers.lock() {
                     if let Some(file) = transfers.get_mut(file_name) {
-                        if let Err(e) = file.seek(SeekFrom::Start(*offset)) {
-                            eprintln!("Failed to seek in file {file_name}: {e}");
-                            return Some(Message::FileTransferError {
-                                file_name: file_name.clone(),
-                                error: format!("Seek error: {e}"),
-                            });
-                        }
-
-                        if let Err(e) = file.write_all(chunk) {
-                            eprintln!("Failed to write chunk to file {file_name}: {e}");
-                            return Some(Message::FileTransferError {
-                                file_name: file_name.clone(),
-                                error: format!("Write error: {e}"),
-                            });
-                        }
-
-                        if let Err(e) = file.flush() {
-                            eprintln!("Failed to flush file {file_name}: {e}");
-                        }
+                        file.seek(SeekFrom::Start(*offset))?;
+                        file.write_all(chunk)?;
+                        file.flush()?;
                     }
                 }
-                None
+                Ok(None)
             }
             Message::FileTransferEnd { file_name } => {
                 println!("File transfer for {file_name} completed from {sender_id}.");
@@ -222,7 +192,7 @@ impl Plugin for FileTransferPlugin {
 
                 let file_path = Path::new(&self.download_dir).join(file_name);
                 println!("File saved to: {}", file_path.display());
-                None
+                Ok(None)
             }
             Message::FileTransferError { file_name, error } => {
                 eprintln!("File transfer error for {file_name} from {sender_id}: {error}");
@@ -233,16 +203,10 @@ impl Plugin for FileTransferPlugin {
 
                 // Clean up partial file
                 let file_path = Path::new(&self.download_dir).join(file_name);
-                if let Err(e) = std::fs::remove_file(&file_path) {
-                    eprintln!(
-                        "Failed to remove partial file {}: {}",
-                        file_path.display(),
-                        e
-                    );
-                }
-                None
+                std::fs::remove_file(&file_path)?;
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -259,7 +223,7 @@ impl Default for InputSharePlugin {
 
 impl InputSharePlugin {
     pub fn new() -> Self {
-        let enigo = match enigo::Enigo::new(&enigo::Settings::default()) {
+        let enigo = match create_enigo_instance() {
             Ok(e) => Some(e),
             Err(err) => {
                 eprintln!("Failed to initialize input simulation: {err}");
@@ -358,7 +322,7 @@ impl Plugin for InputSharePlugin {
         "input-share"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::KeyEvent(key_event) => {
                 println!("Key event from {sender_id}: {key_event:?}");
@@ -368,20 +332,16 @@ impl Plugin for InputSharePlugin {
                         if let Some(key) = self.keycode_to_enigo_key(&key_event.code) {
                             match key_event.action {
                                 KeyAction::Press => {
-                                    if let Err(e) = enigo.key(key, enigo::Direction::Press) {
-                                        eprintln!("Failed to press key: {e}");
-                                    }
+                                    enigo.key(key, enigo::Direction::Press)?;
                                 }
                                 KeyAction::Release => {
-                                    if let Err(e) = enigo.key(key, enigo::Direction::Release) {
-                                        eprintln!("Failed to release key: {e}");
-                                    }
+                                    enigo.key(key, enigo::Direction::Release)?;
                                 }
                             }
                         }
                     }
                 }
-                None
+                Ok(None)
             }
             Message::MouseEvent(mouse_event) => {
                 println!("Mouse event from {sender_id}: {mouse_event:?}");
@@ -390,49 +350,35 @@ impl Plugin for InputSharePlugin {
                     if let Some(ref mut enigo) = enigo_guard.as_mut() {
                         match mouse_event.action {
                             MouseAction::Move => {
-                                if let Err(e) = enigo.move_mouse(
+                                enigo.move_mouse(
                                     mouse_event.x,
                                     mouse_event.y,
                                     enigo::Coordinate::Abs,
-                                ) {
-                                    eprintln!("Failed to move mouse: {e}");
-                                }
+                                )?;
                             }
                             MouseAction::Press => {
                                 if let Some(button) = &mouse_event.button {
                                     let enigo_button = self.mouse_button_to_enigo(button);
-                                    if let Err(e) =
-                                        enigo.button(enigo_button, enigo::Direction::Press)
-                                    {
-                                        eprintln!("Failed to press mouse button: {e}");
-                                    }
+                                    enigo.button(enigo_button, enigo::Direction::Press)?;
                                 }
                             }
                             MouseAction::Release => {
                                 if let Some(button) = &mouse_event.button {
                                     let enigo_button = self.mouse_button_to_enigo(button);
-                                    if let Err(e) =
-                                        enigo.button(enigo_button, enigo::Direction::Release)
-                                    {
-                                        eprintln!("Failed to release mouse button: {e}");
-                                    }
+                                    enigo.button(enigo_button, enigo::Direction::Release)?;
                                 }
                             }
                             MouseAction::Scroll => {
                                 if let Some(scroll_delta) = mouse_event.scroll_delta {
-                                    if let Err(e) =
-                                        enigo.scroll(scroll_delta as i32, enigo::Axis::Vertical)
-                                    {
-                                        eprintln!("Failed to scroll: {e}");
-                                    }
+                                    enigo.scroll(scroll_delta as i32, enigo::Axis::Vertical)?;
                                 }
                             }
                         }
                     }
                 }
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -444,7 +390,7 @@ impl Plugin for NotificationSyncPlugin {
         "notification-sync"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::Notification {
                 title,
@@ -465,13 +411,11 @@ impl Plugin for NotificationSyncPlugin {
 
                 notification.timeout(notify_rust::Timeout::Milliseconds(5000));
 
-                if let Err(e) = notification.show() {
-                    eprintln!("Failed to show notification: {e}");
-                }
+                notification.show()?;
 
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -483,74 +427,43 @@ impl Plugin for MediaControlPlugin {
         "media-control"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::MediaControl { action } => {
                 println!("Media control action from {sender_id}: {action:?}");
 
                 // Use Enigo to simulate media key presses
-                if let Ok(mut enigo) = enigo::Enigo::new(&enigo::Settings::default()) {
+                if let Ok(mut enigo) = create_enigo_instance() {
                     match action {
                         MediaControlAction::Play => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send play key: {e}");
-                            }
+                            enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)?;
                         }
                         MediaControlAction::Pause => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send pause key: {e}");
-                            }
+                            enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)?;
                         }
                         MediaControlAction::PlayPause => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send play/pause key: {e}");
-                            }
+                            enigo.key(enigo::Key::MediaPlayPause, enigo::Direction::Click)?;
                         }
                         MediaControlAction::Next => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::MediaNextTrack, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send next track key: {e}");
-                            }
+                            enigo.key(enigo::Key::MediaNextTrack, enigo::Direction::Click)?;
                         }
                         MediaControlAction::Previous => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::MediaPrevTrack, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send previous track key: {e}");
-                            }
+                            enigo.key(enigo::Key::MediaPrevTrack, enigo::Direction::Click)?;
                         }
                         MediaControlAction::VolumeUp => {
-                            if let Err(e) = enigo.key(enigo::Key::VolumeUp, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send volume up key: {e}");
-                            }
+                            enigo.key(enigo::Key::VolumeUp, enigo::Direction::Click)?;
                         }
                         MediaControlAction::VolumeDown => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::VolumeDown, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send volume down key: {e}");
-                            }
+                            enigo.key(enigo::Key::VolumeDown, enigo::Direction::Click)?;
                         }
                         MediaControlAction::ToggleMute => {
-                            if let Err(e) =
-                                enigo.key(enigo::Key::VolumeMute, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to send mute key: {e}");
-                            }
+                            enigo.key(enigo::Key::VolumeMute, enigo::Direction::Click)?;
                         }
                     }
                 }
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -562,7 +475,7 @@ impl Plugin for BatteryStatusPlugin {
         "battery-status"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::BatteryStatus(status) => {
                 println!(
@@ -572,9 +485,9 @@ impl Plugin for BatteryStatusPlugin {
 
                 // Store or display the remote battery status
                 // This could be saved to a file or displayed in a GUI
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -618,49 +531,64 @@ impl BatteryStatusPlugin {
     }
 }
 
-pub struct RemoteCommandsPlugin;
+pub struct RemoteCommandsPlugin {
+    allowed_commands: Vec<String>,
+}
+
+impl Default for RemoteCommandsPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RemoteCommandsPlugin {
+    pub fn new() -> Self {
+        RemoteCommandsPlugin {
+            allowed_commands: vec![
+                "echo".to_string(),
+                "date".to_string(),
+                "whoami".to_string(),
+                "pwd".to_string(),
+                "ls".to_string(),
+                "df".to_string(),
+                "uptime".to_string(),
+                "uname".to_string(),
+            ],
+        }
+    }
+}
 
 impl Plugin for RemoteCommandsPlugin {
     fn name(&self) -> &'static str {
         "remote-commands"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::RemoteCommand { command, args } => {
                 println!("Remote command from {sender_id}: {command} with args {args:?}");
 
                 // Security: Only allow specific whitelisted commands
-                let allowed_commands = vec![
-                    "echo", "date", "whoami", "pwd", "ls", "df", "uptime", "uname",
-                ];
-
-                if !allowed_commands.contains(&command.as_str()) {
+                if !self.allowed_commands.contains(&command.to_string()) {
                     eprintln!("Command '{command}' is not allowed");
-                    return None;
+                    return Ok(None);
                 }
 
-                match Command::new(command).args(args).output() {
-                    Ok(output) => {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        let stderr = String::from_utf8_lossy(&output.stderr);
+                let output = Command::new(command).args(args).output()?;
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
 
-                        println!("Command output:");
-                        println!("STDOUT: {}", stdout);
-                        if !stderr.is_empty() {
-                            println!("STDERR: {}", stderr);
-                        }
-
-                        // In a real implementation, you might want to send the output back
-                        // This would require extending the Message enum
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to execute command '{command}': {e}");
-                    }
+                println!("Command output:");
+                println!("STDOUT: {}", stdout);
+                if !stderr.is_empty() {
+                    println!("STDERR: {}", stderr);
                 }
-                None
+
+                // In a real implementation, you might want to send the output back
+                // This would require extending the Message enum
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -677,7 +605,7 @@ impl Default for TouchpadModePlugin {
 
 impl TouchpadModePlugin {
     pub fn new() -> Self {
-        let enigo = match enigo::Enigo::new(&enigo::Settings::default()) {
+        let enigo = match create_enigo_instance() {
             Ok(e) => Some(e),
             Err(err) => {
                 eprintln!("Failed to initialize input simulation for touchpad: {err}");
@@ -696,7 +624,7 @@ impl Plugin for TouchpadModePlugin {
         "touchpad-mode"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::TouchpadEvent(event) => {
                 println!("Touchpad event from {sender_id}: {event:?}");
@@ -705,53 +633,35 @@ impl Plugin for TouchpadModePlugin {
                     if let Some(ref mut enigo) = enigo_guard.as_mut() {
                         // Move cursor based on delta movement
                         if event.dx != 0.0 || event.dy != 0.0 {
-                            if let Err(e) = enigo.move_mouse(
+                            enigo.move_mouse(
                                 event.dx as i32,
                                 event.dy as i32,
                                 enigo::Coordinate::Rel,
-                            ) {
-                                eprintln!("Failed to move mouse cursor: {e}");
-                            }
+                            )?;
                         }
 
                         // Handle scroll
                         if event.scroll_delta_y != 0.0 {
-                            if let Err(e) =
-                                enigo.scroll(event.scroll_delta_y as i32, enigo::Axis::Vertical)
-                            {
-                                eprintln!("Failed to scroll vertically: {e}");
-                            }
+                            enigo.scroll(event.scroll_delta_y as i32, enigo::Axis::Vertical)?;
                         }
 
                         if event.scroll_delta_x != 0.0 {
-                            if let Err(e) =
-                                enigo.scroll(event.scroll_delta_x as i32, enigo::Axis::Horizontal)
-                            {
-                                eprintln!("Failed to scroll horizontally: {e}");
-                            }
+                            enigo.scroll(event.scroll_delta_x as i32, enigo::Axis::Horizontal)?;
                         }
 
                         // Handle clicks
                         if event.is_left_click {
-                            if let Err(e) =
-                                enigo.button(enigo::Button::Left, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to click left button: {e}");
-                            }
+                            enigo.button(enigo::Button::Left, enigo::Direction::Click)?;
                         }
 
                         if event.is_right_click {
-                            if let Err(e) =
-                                enigo.button(enigo::Button::Right, enigo::Direction::Click)
-                            {
-                                eprintln!("Failed to click right button: {e}");
-                            }
+                            enigo.button(enigo::Button::Right, enigo::Direction::Click)?;
                         }
                     }
                 }
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -768,7 +678,7 @@ impl Default for SlideControlPlugin {
 
 impl SlideControlPlugin {
     pub fn new() -> Self {
-        let enigo = match enigo::Enigo::new(&enigo::Settings::default()) {
+        let enigo = match create_enigo_instance() {
             Ok(e) => Some(e),
             Err(err) => {
                 eprintln!("Failed to initialize input simulation for slide control: {err}");
@@ -787,7 +697,7 @@ impl Plugin for SlideControlPlugin {
         "slide-control"
     }
 
-    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Option<Message> {
+    fn handle_message(&self, message: &Message, sender_id: &DeviceId) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match message {
             Message::SlideControl(action) => {
                 println!("Slide control action from {sender_id}: {action:?}");
@@ -797,40 +707,26 @@ impl Plugin for SlideControlPlugin {
                         match action {
                             SlideControlAction::NextSlide => {
                                 // Send Right Arrow key (common for next slide)
-                                if let Err(e) =
-                                    enigo.key(enigo::Key::RightArrow, enigo::Direction::Click)
-                                {
-                                    eprintln!("Failed to send next slide key: {e}");
-                                }
+                                enigo.key(enigo::Key::RightArrow, enigo::Direction::Click)?;
                             }
                             SlideControlAction::PreviousSlide => {
                                 // Send Left Arrow key (common for previous slide)
-                                if let Err(e) =
-                                    enigo.key(enigo::Key::LeftArrow, enigo::Direction::Click)
-                                {
-                                    eprintln!("Failed to send previous slide key: {e}");
-                                }
+                                enigo.key(enigo::Key::LeftArrow, enigo::Direction::Click)?;
                             }
                             SlideControlAction::StartPresentation => {
                                 // Send F5 key (common for start presentation)
-                                if let Err(e) = enigo.key(enigo::Key::F5, enigo::Direction::Click) {
-                                    eprintln!("Failed to send start presentation key: {e}");
-                                }
+                                enigo.key(enigo::Key::F5, enigo::Direction::Click)?;
                             }
                             SlideControlAction::EndPresentation => {
                                 // Send Escape key (common for end presentation)
-                                if let Err(e) =
-                                    enigo.key(enigo::Key::Escape, enigo::Direction::Click)
-                                {
-                                    eprintln!("Failed to send end presentation key: {e}");
-                                }
+                                enigo.key(enigo::Key::Escape, enigo::Direction::Click)?;
                             }
                         }
                     }
                 }
-                None
+                Ok(None)
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
@@ -845,7 +741,7 @@ pub fn create_all_plugins() -> Vec<Box<dyn Plugin>> {
         Box::new(NotificationSyncPlugin),
         Box::new(MediaControlPlugin),
         Box::new(BatteryStatusPlugin::new()),
-        Box::new(RemoteCommandsPlugin),
+        Box::new(RemoteCommandsPlugin::new()),
         Box::new(TouchpadModePlugin::new()),
         Box::new(SlideControlPlugin::new()),
     ]
@@ -866,15 +762,15 @@ mod tests {
 
         // Test ping response
         let response = plugin.handle_message(&Message::Ping, &device_id);
-        assert_eq!(response, Some(Message::Pong));
+        assert_eq!(response.unwrap(), Some(Message::Pong));
 
         // Test pong handling (should return None)
         let response = plugin.handle_message(&Message::Pong, &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
 
         // Test other messages (should return None)
         let response = plugin.handle_message(&Message::RequestClipboard, &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -887,11 +783,11 @@ mod tests {
             &Message::ClipboardSync("test content".to_string()),
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
 
         // Test clipboard request (should return content or empty string)
         let response = plugin.handle_message(&Message::RequestClipboard, &device_id);
-        assert!(matches!(response, Some(Message::ClipboardSync(_))));
+        assert!(matches!(response.unwrap(), Some(Message::ClipboardSync(_))));
     }
 
     #[test]
@@ -907,7 +803,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
 
         // Test file transfer end
         let response = plugin.handle_message(
@@ -916,7 +812,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -930,7 +826,7 @@ mod tests {
             code: KeyCode::A,
         };
         let response = plugin.handle_message(&Message::KeyEvent(key_event), &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
 
         // Test mouse event
         let mouse_event = MouseEvent {
@@ -941,7 +837,7 @@ mod tests {
             scroll_delta: None,
         };
         let response = plugin.handle_message(&Message::MouseEvent(mouse_event), &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -958,7 +854,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -973,7 +869,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -987,12 +883,12 @@ mod tests {
             is_charging: true,
         };
         let response = plugin.handle_message(&Message::BatteryStatus(battery_status), &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
     fn test_remote_commands_plugin() {
-        let plugin = RemoteCommandsPlugin;
+        let plugin = RemoteCommandsPlugin::new();
         let device_id = DeviceId::from("test-device");
 
         // Test allowed command
@@ -1003,7 +899,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
 
         // Test disallowed command (should not crash)
         let response = plugin.handle_message(
@@ -1013,7 +909,7 @@ mod tests {
             },
             &device_id,
         );
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -1033,7 +929,7 @@ mod tests {
             is_right_click: false,
         };
         let response = plugin.handle_message(&Message::TouchpadEvent(touchpad_event), &device_id);
-        assert_eq!(response, None);
+        assert_eq!(response.unwrap(), None);
     }
 
     #[test]
@@ -1051,7 +947,7 @@ mod tests {
 
         for action in actions {
             let response = plugin.handle_message(&Message::SlideControl(action), &device_id);
-            assert_eq!(response, None);
+            assert_eq!(response.unwrap(), None);
         }
     }
 

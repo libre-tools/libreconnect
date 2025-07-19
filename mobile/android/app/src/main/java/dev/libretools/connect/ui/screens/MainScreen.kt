@@ -15,14 +15,26 @@ import dev.libretools.connect.data.Device
 import dev.libretools.connect.ui.components.DeviceCard
 import dev.libretools.connect.ui.components.TipCard
 import java.util.*
+import android.util.Log
+import android.net.Uri
+import dev.libretools.connect.service.LibreConnectServiceConnection
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(
         navController: NavController,
         devices: List<Device>,
-        connectionStatus: String = "Ready"
+        connectionStatus: String = "Ready",
+        serviceConnection: LibreConnectServiceConnection? = null
 ) {
+    // Log all device IDs for debugging
+    LaunchedEffect(devices) {
+        Log.d("DevicesScreen", "Device count: ${devices.size}")
+        Log.d("DevicesScreen", "Device IDs: ${devices.joinToString { it.id }}")
+        devices.forEach { device ->
+            Log.d("DevicesScreen", "Device: ${device.name} (${device.id}) - Connected: ${device.isConnected}")
+        }
+    }
     Scaffold(
             topBar = {
                 TopAppBar(
@@ -46,6 +58,14 @@ fun DevicesScreen(
                             }
                             IconButton(onClick = { navController.navigate("about") }) {
                                 Icon(Lucide.Info, "About")
+                            }
+                            // Manual refresh button
+                            if (serviceConnection != null) {
+                                IconButton(onClick = {
+                                    serviceConnection.startDeviceDiscovery()
+                                }) {
+                                    Icon(Lucide.RefreshCw, "Refresh Devices")
+                                }
                             }
                         }
                 )
@@ -71,7 +91,11 @@ fun DevicesScreen(
                 items(devices) { device ->
                     DeviceCard(
                             device = device,
-                            onClick = { navController.navigate("device/${device.id}") }
+                            onClick = {
+                                Log.d("DevicesScreen", "Clicked device: ${device.id}")
+                                val safeId = Uri.encode(device.id)
+                                navController.navigate("device/$safeId")
+                            }
                     )
                 }
             }

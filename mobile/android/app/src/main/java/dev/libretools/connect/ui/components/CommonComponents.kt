@@ -211,7 +211,7 @@ fun QuickActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun DeviceInfoCard(device: Device) {
+fun DeviceInfoCard(device: Device, onReconnectClick: () -> Unit) {
     Card(
             modifier = Modifier.fillMaxWidth(),
             colors =
@@ -264,12 +264,22 @@ fun DeviceInfoCard(device: Device) {
             if (!device.isConnected) {
                 Spacer(modifier = Modifier.height(16.dp))
                 FilledTonalButton(
-                        onClick = { /* TODO: Reconnect */},
+                        onClick = onReconnectClick,
                         modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Lucide.RotateCcw, contentDescription = null)
+                    Icon(Lucide.Key, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Try to Reconnect")
+                    Text("Pair Device")
+                }
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                        onClick = onReconnectClick,
+                        modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Lucide.Unplug, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Disconnect")
                 }
             }
         }

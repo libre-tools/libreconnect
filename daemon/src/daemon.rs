@@ -15,38 +15,48 @@ use shared::{
     PluginType,
 };
 use std::collections::HashMap;
+use std::fs;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
+use rand::Rng;
+use hostname;
 
 /// Maximum message size to prevent memory exhaustion
 const MAX_MESSAGE_SIZE: usize = shared::MAX_MESSAGE_SIZE;
 
 /// Connection timeout duration
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(120); // Match Android's 2-minute timeout
 
 /// LibreConnect daemon main structure
 pub struct Daemon {
     /// Map of paired devices
     paired_devices: Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
+    /// Current pairing key (6 digits)
+    pairing_key: Arc<Mutex<String>>,
     /// Available plugins
     plugins: Arc<Vec<Box<dyn Plugin>>>,
     /// Local device information
     local_device: DeviceInfo,
+    /// Port the daemon listens on
+    port: u16,
+    /// File path for persisting paired devices
+    paired_devices_file: PathBuf,
 }
 
 impl Default for Daemon {
     fn default() -> Self {
-        Self::new()
+        Self::new(DEFAULT_PORT)
     }
 }
 
 impl Daemon {
     /// Create a new daemon instance
-    pub fn new() -> Self {
+    pub fn new(port: u16) -> Self {
         let local_device = DeviceInfo::new(
             format!(
                 "libreconnect-{}",
@@ -60,10 +70,111 @@ impl Daemon {
             PluginType::all(),
         );
 
-        Daemon {
+        // Setup paired devices file path
+        let paired_devices_file = Self::get_paired_devices_file_path();
+
+        // Create daemon instance first
+        let daemon = Daemon {
             paired_devices: Arc::new(Mutex::new(HashMap::new())),
+            pairing_key: Arc::new(Mutex::new(String::new())),
             plugins: Arc::new(Self::create_plugins()),
             local_device,
+            port,
+            paired_devices_file,
+        };
+
+        // Load existing paired devices
+        daemon.load_paired_devices();
+
+        // Generate initial pairing key
+        let pairing_key = Self::generate_pairing_key();
+        {
+            let mut key = daemon.pairing_key.lock().unwrap();
+            *key = pairing_key.clone();
+        }
+        println!("🔑 Generated pairing key: {}", pairing_key);
+
+        daemon
+    }
+
+    /// Generate a 6-digit pairing key
+    fn generate_pairing_key() -> String {
+        let mut rng = rand::thread_rng();
+        format!("{:06}", rng.gen_range(100000..=999999))
+    }
+
+    /// Get the file path for storing paired devices
+    fn get_paired_devices_file_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
+            .join("libreconnect");
+        
+        // Create config directory if it doesn't exist
+        if let Err(e) = fs::create_dir_all(&config_dir) {
+            eprintln!("⚠️ Failed to create config directory: {}", e);
+        }
+        
+        config_dir.join("paired_devices.json")
+    }
+
+    /// Load paired devices from disk
+    fn load_paired_devices(&self) {
+        match fs::read_to_string(&self.paired_devices_file) {
+            Ok(content) => {
+                match serde_json::from_str::<Vec<DeviceInfo>>(&content) {
+                    Ok(devices) => {
+                        let mut paired_devices = self.paired_devices.lock().unwrap();
+                        for device in devices {
+                            paired_devices.insert(device.id.clone(), device);
+                        }
+                        let count = paired_devices.len();
+                        drop(paired_devices);
+                        if count > 0 {
+                            println!("📂 Loaded {} paired device(s) from disk", count);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("⚠️ Failed to parse paired devices file: {}", e);
+                    }
+                }
+            }
+            Err(_) => {
+                // File doesn't exist yet, which is fine for first run
+                println!("📂 No existing paired devices file found (first run)");
+            }
+        }
+    }
+
+    /// Save paired devices to disk
+    fn save_paired_devices(&self) {
+        Self::save_paired_devices_static(&self.paired_devices, &self.paired_devices_file);
+    }
+    /// Save paired devices to disk (static version)
+    fn save_paired_devices_static(
+        paired_devices: &Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
+        file_path: &PathBuf,
+    ) {
+        let devices: Vec<DeviceInfo> = {
+            match paired_devices.lock() {
+                Ok(devices_guard) => devices_guard.values().cloned().collect(),
+                Err(_) => {
+                    eprintln!("⚠️ Failed to lock paired devices for saving");
+                    return;
+                }
+            }
+        };
+
+        match serde_json::to_string_pretty(&devices) {
+            Ok(content) => {
+                if let Err(e) = fs::write(file_path, content) {
+                    eprintln!("⚠️ Failed to save paired devices: {}", e);
+                } else {
+                    println!("💾 Saved {} paired device(s) to disk", devices.len());
+                }
+            }
+            Err(e) => {
+                eprintln!("⚠️ Failed to serialize paired devices: {}", e);
+            }
         }
     }
 
@@ -77,7 +188,7 @@ impl Daemon {
             Box::new(NotificationSyncPlugin),
             Box::new(MediaControlPlugin),
             Box::new(BatteryStatusPlugin::new()),
-            Box::new(RemoteCommandsPlugin),
+            Box::new(RemoteCommandsPlugin::new()),
             Box::new(TouchpadModePlugin::new()),
             Box::new(SlideControlPlugin::new()),
         ]
@@ -96,7 +207,7 @@ impl Daemon {
         let server_handle = self.start_tcp_server().await?;
 
         println!("✅ LibreConnect Daemon started successfully");
-        println!("🌐 Listening on port {DEFAULT_PORT}");
+        println!("🌐 Listening on port {}", self.port);
         println!("🔍 mDNS discovery active");
 
         // Wait for both services to complete (they run indefinitely)
@@ -124,7 +235,7 @@ impl Daemon {
             ServiceDaemon::new().map_err(|e| DaemonError::MdnsInitialization(e.to_string()))?;
 
         let instance_name = &self.local_device.name;
-        let host_name = format!("{}.local.", instance_name.replace(' ', "-").to_lowercase());
+        let host_name = format!("{}.local.", hostname::get()?.to_string_lossy().replace(' ', "-").to_lowercase());
         let properties = [
             ("version", PROTOCOL_VERSION),
             ("device_type", "desktop"),
@@ -135,15 +246,17 @@ impl Daemon {
             MDNS_SERVICE_TYPE,
             instance_name,
             &host_name,
-            "",
-            DEFAULT_PORT,
+            "192.168.1.6", // Use actual IP instead of empty string
+            self.port,
             &properties[..],
         )
         .map_err(|e| DaemonError::MdnsInitialization(e.to_string()))?
         .to_owned();
 
+        println!("📡 Registering mDNS service: {} on {}", instance_name, host_name);
         mdns.register(service_info)
             .map_err(|e| DaemonError::MdnsRegistration(e.to_string()))?;
+        println!("✅ mDNS service registered successfully");
 
         let service_receiver = mdns
             .browse(MDNS_SERVICE_TYPE)
@@ -206,7 +319,7 @@ impl Daemon {
     async fn start_tcp_server(
         &self,
     ) -> Result<tokio::task::JoinHandle<Result<(), DaemonError>>, DaemonError> {
-        let bind_addr = format!("0.0.0.0:{DEFAULT_PORT}");
+        let bind_addr = format!("0.0.0.0:{}", self.port);
         let listener = TcpListener::bind(&bind_addr)
             .await
             .map_err(|e| DaemonError::ServerStart(format!("Failed to bind to {bind_addr}: {e}")))?;
@@ -214,7 +327,9 @@ impl Daemon {
         println!("🌐 TCP server listening on {bind_addr}");
 
         let paired_devices = self.paired_devices.clone();
+        let pairing_key = self.pairing_key.clone();
         let plugins = self.plugins.clone();
+        let paired_devices_file = self.paired_devices_file.clone();
 
         Ok(tokio::spawn(async move {
             loop {
@@ -223,14 +338,18 @@ impl Daemon {
                         println!("🔗 New connection from {addr}");
 
                         let paired_devices = paired_devices.clone();
+                        let pairing_key = pairing_key.clone();
                         let plugins = plugins.clone();
+                        let paired_devices_file = paired_devices_file.clone();
 
                         tokio::spawn(async move {
                             if let Err(e) = Self::handle_client_connection(
                                 socket,
                                 addr,
                                 paired_devices,
+                                pairing_key,
                                 plugins,
+                                paired_devices_file,
                             )
                             .await
                             {
@@ -252,7 +371,9 @@ impl Daemon {
         mut stream: TcpStream,
         addr: SocketAddr,
         paired_devices: Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
+        pairing_key: Arc<Mutex<String>>,
         plugins: Arc<Vec<Box<dyn Plugin>>>,
+        paired_devices_file: PathBuf,
     ) -> Result<(), DaemonError> {
         let mut buffer = vec![0u8; 8192]; // Use reasonable buffer size
 
@@ -290,14 +411,17 @@ impl Daemon {
             );
 
             // Handle message
-            match Self::handle_message(message, addr, &paired_devices, &plugins).await? {
+            match Self::handle_message(message, addr, &paired_devices, &pairing_key, &plugins, &paired_devices_file).await? {
                 Some(response) => {
-                    let response_data = serde_json::to_vec(&response)
+                    let mut response_data = serde_json::to_vec(&response)
                         .map_err(|e| DaemonError::MessageSerialization(e.to_string()))?;
+                    
+                    // Add newline for line-delimited JSON (Android expects this)
+                    response_data.push(b'\n');
 
                     match timeout(CONNECTION_TIMEOUT, stream.write_all(&response_data)).await {
                         Ok(Ok(())) => {
-                            // Write successful
+                            println!("📤 Sent response to {addr}: {}", Self::message_type_name(&response));
                         }
                         Ok(Err(e)) => {
                             return Err(DaemonError::NetworkError(format!(
@@ -321,13 +445,15 @@ impl Daemon {
         message: Message,
         addr: SocketAddr,
         paired_devices: &Arc<Mutex<HashMap<DeviceId, DeviceInfo>>>,
+        pairing_key: &Arc<Mutex<String>>,
         plugins: &Arc<Vec<Box<dyn Plugin>>>,
+        paired_devices_file: &PathBuf,
     ) -> Result<Option<Message>, DaemonError> {
         match message {
             Message::RequestPairing(device_info) => {
-                println!("🤝 Pairing request from {}: {}", addr, device_info.name);
+                println!("🤝 Basic pairing request from {}: {} (auto-accepting for compatibility)", addr, device_info.name);
 
-                // Auto-accept pairing for now (in production, this should require user approval)
+                // Auto-accept basic pairing for backward compatibility
                 {
                     let mut devices = paired_devices.lock().map_err(|_| {
                         DaemonError::LockError("Failed to lock paired devices".to_string())
@@ -340,14 +466,72 @@ impl Daemon {
                     );
                 }
 
-                Ok(Some(Message::PairingAccepted(device_info.id)))
+                // Save paired devices to disk
+                Self::save_paired_devices_static(paired_devices, paired_devices_file);
+
+                Ok(Some(Message::PairingAccepted { device_id: device_info.id.as_str().to_string() }))
+            }
+            Message::RequestPairingWithKey { id, name, device_type, capabilities, pairing_key: provided_key } => {
+                println!("🔑 Pairing request with key from {}: {}", addr, name);
+
+                // Validate pairing key
+                let valid_key = {
+                    let key = pairing_key.lock().map_err(|_| {
+                        DaemonError::LockError("Failed to lock pairing key".to_string())
+                    })?;
+                    *key == provided_key
+                };
+
+                if valid_key {
+                    // Create device info from the received data
+                    let device_info = DeviceInfo {
+                        id: DeviceId::new(id),
+                        name: name.clone(),
+                        device_type: device_type.parse().unwrap_or(DeviceType::Mobile),
+                        capabilities: capabilities.iter()
+                            .filter_map(|cap| cap.parse().ok())
+                            .collect(),
+                    };
+
+                    // Accept pairing and store device
+                    {
+                        let mut devices = paired_devices.lock().map_err(|_| {
+                            DaemonError::LockError("Failed to lock paired devices".to_string())
+                        })?;
+                        devices.insert(device_info.id.clone(), device_info.clone());
+                        println!(
+                            "✅ Device paired with key: {} (Total: {})",
+                            device_info.name,
+                            devices.len()
+                        );
+                    }
+
+                    // Save paired devices to disk
+                    Self::save_paired_devices_static(paired_devices, paired_devices_file);
+
+                    // Generate new pairing key for security
+                    let new_key = Self::generate_pairing_key();
+                    {
+                        let mut key = pairing_key.lock().map_err(|_| {
+                            DaemonError::LockError("Failed to lock pairing key".to_string())
+                        })?;
+                        *key = new_key.clone();
+                    }
+                    println!("🔑 Generated new pairing key: {}", new_key);
+
+                    Ok(Some(Message::PairingAccepted { device_id: device_info.id.as_str().to_string() }))
+                } else {
+                    println!("❌ Invalid pairing key from {}: provided '{}' but expected a valid key", addr, provided_key);
+                    // Create minimal device info for rejection response
+                    Ok(Some(Message::PairingRejected { device_id: id, reason: "Invalid pairing key".to_string() }))
+                }
             }
             _ => {
                 // Route message to plugins
                 let sender_id = DeviceId::new(addr.to_string());
 
                 for plugin in plugins.iter() {
-                    if let Some(response) = plugin.handle_message(&message, &sender_id) {
+                    if let Ok(Some(response)) = plugin.handle_message(&message, &sender_id) {
                         println!("🔌 Plugin '{}' handled message", plugin.name());
                         return Ok(Some(response));
                     }
@@ -366,8 +550,9 @@ impl Daemon {
             Message::Pong => "Pong",
             Message::DeviceInfo(_) => "DeviceInfo",
             Message::RequestPairing(_) => "RequestPairing",
-            Message::PairingAccepted(_) => "PairingAccepted",
-            Message::PairingRejected(_) => "PairingRejected",
+            Message::RequestPairingWithKey { .. } => "RequestPairingWithKey",
+            Message::PairingAccepted { .. } => "PairingAccepted",
+            Message::PairingRejected { .. } => "PairingRejected",
             Message::ClipboardSync(_) => "ClipboardSync",
             Message::RequestClipboard => "RequestClipboard",
             Message::FileTransferRequest { .. } => "FileTransferRequest",
@@ -451,7 +636,7 @@ mod tests {
 
     #[test]
     fn test_daemon_creation() {
-        let daemon = Daemon::new();
+        let daemon = Daemon::new(1716);
         assert_eq!(daemon.get_available_plugins().len(), 10);
         assert_eq!(daemon.get_local_device().device_type, DeviceType::Desktop);
         assert!(daemon.get_paired_devices().unwrap().is_empty());
@@ -471,7 +656,7 @@ mod tests {
     async fn test_daemon_start_stop() {
         // This test would require more complex setup to avoid port conflicts
         // For now, just test that we can create and configure a daemon
-        let daemon = Daemon::new();
+        let daemon = Daemon::new(1716);
         assert!(daemon.get_available_plugins().len() > 0);
     }
 }

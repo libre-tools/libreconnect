@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -13,10 +14,19 @@ import com.composables.icons.lucide.*
 import dev.libretools.connect.data.Device
 import dev.libretools.connect.ui.components.DeviceInfoCard
 import dev.libretools.connect.ui.components.PluginCard
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeviceDetailScreen(device: Device, navController: NavController) {
+fun DeviceDetailScreen(device: Device?, navController: NavController, serviceConnection: dev.libretools.connect.service.LibreConnectServiceConnection) {
+    Log.d("DeviceDetailScreen", "deviceId: ${device?.id}, device found: ${device != null}")
+    if (device == null) {
+        // Show error UI if device is missing
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Device not found or offline.", color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
     Scaffold(
             topBar = {
                 TopAppBar(
@@ -39,7 +49,16 @@ fun DeviceDetailScreen(device: Device, navController: NavController) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { DeviceInfoCard(device) }
+            item { 
+                DeviceInfoCard(device) { 
+                    if (!device.isConnected) {
+                        // Navigate to pairing screen instead of directly connecting
+                        navController.navigate("pairing/${device.id}")
+                    } else {
+                        serviceConnection.disconnectFromDevice(device.id)
+                    }
+                } 
+            }
 
             item {
                 Text(

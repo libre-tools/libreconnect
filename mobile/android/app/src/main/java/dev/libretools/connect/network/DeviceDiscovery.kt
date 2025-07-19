@@ -30,20 +30,21 @@ class DeviceDiscovery(
 
     suspend fun startDiscovery() {
         withContext(Dispatchers.IO) {
+            Log.i(TAG, "startDiscovery called. isDiscoveryActive=$isDiscoveryActive")
             if (isDiscoveryActive) {
-                Log.w(TAG, "Discovery already active")
-                return@withContext
+                Log.w(TAG, "Discovery already active, restarting...")
+                stop() // Stop previous discovery before restarting
             }
-
             isDiscoveryActive = true
             discoveredDevices.clear()
-
-            Log.d(TAG, "Starting real mDNS device discovery")
+            val inetAddress = getWifiInetAddress()
+            Log.i(TAG, "Starting real mDNS device discovery on IP: $inetAddress")
             startRealDiscovery()
         }
     }
 
     private fun startRealDiscovery() {
+        Log.i(TAG, "startRealDiscovery called")
         discoveryJob =
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -54,21 +55,35 @@ class DeviceDiscovery(
                         multicastLock.acquire()
 
                         try {
+                            // Log all network interfaces
+                            try {
+                                val interfaces = java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())
+                                for (iface in interfaces) {
+                                    val addrs = java.util.Collections.list(iface.inetAddresses)
+                                    for (addr in addrs) {
+                                        Log.d(TAG, "Interface: ${iface.displayName}, Address: ${addr.hostAddress}")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error listing network interfaces", e)
+                            }
+
                             // Initialize JmDNS
                             val inetAddress = getWifiInetAddress()
+                            Log.d(TAG, "WiFi InetAddress: $inetAddress")
                             if (inetAddress == null) {
                                 Log.e(TAG, "No WiFi connection available")
                                 return@launch
                             }
 
                             jmdns = JmDNS.create(inetAddress, "LibreConnectAndroid")
-                            Log.d(TAG, "JmDNS initialized on ${inetAddress.hostAddress}")
+                            Log.i(TAG, "JmDNS initialized on ${inetAddress.hostAddress}")
 
                             // Add service listener
                             val serviceListener =
                                     object : ServiceListener {
                                         override fun serviceAdded(event: ServiceEvent) {
-                                            Log.d(TAG, "Service added: ${event.name}")
+                                            Log.i(TAG, "Service added: ${event.name} (${event.type})")
                                             // Request service info
                                             jmdns?.requestServiceInfo(
                                                     event.type,
@@ -78,13 +93,13 @@ class DeviceDiscovery(
                                         }
 
                                         override fun serviceRemoved(event: ServiceEvent) {
-                                            Log.d(TAG, "Service removed: ${event.name}")
+                                            Log.i(TAG, "Service removed: ${event.name} (${event.type})")
                                             val deviceId = event.name
                                             discoveredDevices.remove(deviceId)
                                         }
 
                                         override fun serviceResolved(event: ServiceEvent) {
-                                            Log.d(TAG, "Service resolved: ${event.name}")
+                                            Log.i(TAG, "Service resolved: ${event.name} (${event.type})")
                                             val serviceInfo = event.info
 
                                             if (serviceInfo != null) {
@@ -150,6 +165,8 @@ class DeviceDiscovery(
                                                             e
                                                     )
                                                 }
+                                            } else {
+                                                Log.w(TAG, "serviceInfo is null for resolved event: ${event.name}")
                                             }
                                         }
                                     }
@@ -198,17 +215,17 @@ class DeviceDiscovery(
 
     suspend fun stop() {
         withContext(Dispatchers.IO) {
+            Log.i(TAG, "stop called. isDiscoveryActive=$isDiscoveryActive")
             Log.d(TAG, "Stopping DeviceDiscovery")
             isDiscoveryActive = false
-            discoveryJob?.cancel()
-
+            discoveryJob?.cancelAndJoin()
+            discoveryJob = null
             try {
                 jmdns?.close()
                 jmdns = null
             } catch (e: Exception) {
                 Log.e(TAG, "Error closing JmDNS", e)
             }
-
             discoveredDevices.clear()
         }
     }

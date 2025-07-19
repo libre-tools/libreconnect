@@ -58,6 +58,18 @@ impl fmt::Display for DeviceType {
     }
 }
 
+impl std::str::FromStr for DeviceType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Mobile" => Ok(DeviceType::Mobile),
+            "Desktop" => Ok(DeviceType::Desktop),
+            _ => Ok(DeviceType::Mobile), // Default to Mobile for unknown types
+        }
+    }
+}
+
 /// Information about a device in the network
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceInfo {
@@ -95,20 +107,43 @@ impl DeviceInfo {
 
 /// Core message types for LibreConnect protocol
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum Message {
     // === Core Protocol Messages ===
     /// Ping message for connectivity testing
+    #[serde(rename = "Ping")]
     Ping,
     /// Pong response to ping
+    #[serde(rename = "Pong")]
     Pong,
     /// Device information broadcast
+    #[serde(rename = "DeviceInfo")]
     DeviceInfo(DeviceInfo),
     /// Request to pair with another device
+    #[serde(rename = "RequestPairing")]
     RequestPairing(DeviceInfo),
+    /// Request to pair with another device using a pairing key
+    #[serde(rename = "RequestPairingWithKey")]
+    RequestPairingWithKey {
+        id: String,
+        name: String,
+        device_type: String,
+        capabilities: Vec<String>,
+        pairing_key: String,
+    },
     /// Accept pairing request
-    PairingAccepted(DeviceId),
+    #[serde(rename = "PairingAccepted")]
+    PairingAccepted {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+    },
     /// Reject pairing request
-    PairingRejected(DeviceId),
+    #[serde(rename = "PairingRejected")]
+    PairingRejected {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        reason: String,
+    },
 
     // === Plugin Messages ===
     /// Synchronize clipboard content
@@ -633,6 +668,25 @@ impl fmt::Display for PluginType {
             PluginType::RemoteCommands => write!(f, "Remote Commands"),
             PluginType::TouchpadMode => write!(f, "Touchpad Mode"),
             PluginType::SlideControl => write!(f, "Slide Control"),
+        }
+    }
+}
+
+impl std::str::FromStr for PluginType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Clipboard Sync" | "ClipboardSync" => Ok(PluginType::ClipboardSync),
+            "File Transfer" | "FileTransfer" => Ok(PluginType::FileTransfer),
+            "Input Share" | "InputShare" => Ok(PluginType::InputShare),
+            "Notification Sync" | "NotificationSync" => Ok(PluginType::NotificationSync),
+            "Battery Status" | "BatteryStatus" => Ok(PluginType::BatteryStatus),
+            "Media Control" | "MediaControl" => Ok(PluginType::MediaControl),
+            "Remote Commands" | "RemoteCommands" => Ok(PluginType::RemoteCommands),
+            "Touchpad Mode" | "TouchpadMode" => Ok(PluginType::TouchpadMode),
+            "Slide Control" | "SlideControl" => Ok(PluginType::SlideControl),
+            _ => Err(format!("Unknown plugin type: {}", s)),
         }
     }
 }

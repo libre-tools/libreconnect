@@ -8,7 +8,9 @@ import android.os.IBinder
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class LibreConnectServiceConnection(
         private val context: Context,
@@ -23,6 +25,10 @@ class LibreConnectServiceConnection(
     private var service: LibreConnectService? = null
     private var isBound = false
 
+    // Stable StateFlow for connection status
+    private val _connectionStatus = MutableStateFlow("Initializing...")
+    val connectionStatus: StateFlow<String> get() = _connectionStatus
+
     // Service state flows - available after service is connected
     val isServiceRunning: StateFlow<Boolean>?
         get() = service?.isServiceRunning
@@ -33,15 +39,21 @@ class LibreConnectServiceConnection(
     val connectedDevices: StateFlow<List<dev.libretools.connect.data.Device>>?
         get() = service?.connectedDevices
 
-    val connectionStatus: StateFlow<String>?
-        get() = service?.connectionStatus
-
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         Log.d(TAG, "Service connected")
         val localBinder = binder as? LibreConnectService.LocalBinder
         if (localBinder != null) {
             service = localBinder.getService()
             isBound = true
+            // Observe the real connectionStatus flow and update our own
+            service?.connectionStatus?.let { flow ->
+                // Use a coroutine to collect updates
+                kotlinx.coroutines.GlobalScope.launch {
+                    flow.collect { status ->
+                        _connectionStatus.value = status
+                    }
+                }
+            }
             onServiceConnected(service!!)
         } else {
             Log.e(TAG, "Failed to get service from binder")
@@ -52,6 +64,7 @@ class LibreConnectServiceConnection(
         Log.d(TAG, "Service disconnected")
         service = null
         isBound = false
+        _connectionStatus.value = "Disconnected"
         onServiceDisconnected()
     }
 
@@ -106,6 +119,13 @@ class LibreConnectServiceConnection(
     fun disconnectFromDevice(deviceId: String) {
         service?.disconnectFromDevice(deviceId)
                 ?: Log.w(TAG, "Service not available for disconnectFromDevice")
+    }
+    fun pairWithDevice(deviceId: String, pairingKey: String, callback: (Boolean, String?) -> Unit) {
+        service?.pairWithDevice(deviceId, pairingKey, callback)
+                ?: run {
+                    Log.w(TAG, "Service not available for pairWithDevice")
+                    callback(false, "Service not available")
+                }
     }
 
     fun sendPluginMessage(deviceId: String, pluginType: String, message: Map<String, Any>) {

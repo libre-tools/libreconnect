@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -49,6 +53,7 @@ class LibreConnectService : Service() {
     // Core components
     private lateinit var networkManager: NetworkManager
     private lateinit var deviceDiscovery: DeviceDiscovery
+    private lateinit var networkChangeReceiver: BroadcastReceiver
 
     // Service state
     private val _isServiceRunning = MutableStateFlow(false)
@@ -70,6 +75,7 @@ class LibreConnectService : Service() {
         // Initialize core components
         networkManager =
                 NetworkManager(
+                        context = this,
                         onDeviceConnected = { device -> handleDeviceConnected(device) },
                         onDeviceDisconnected = { device -> handleDeviceDisconnected(device) },
                         onConnectionStatusChanged = { status -> _connectionStatus.value = status }
@@ -83,6 +89,16 @@ class LibreConnectService : Service() {
                 )
 
         createNotificationChannel()
+
+        // Register network change receiver
+        networkChangeReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                Log.d(TAG, "Network change detected, restarting device discovery")
+                restartDeviceDiscovery()
+            }
+        }
+        val filter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+        registerReceiver(networkChangeReceiver, filter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -116,6 +132,8 @@ class LibreConnectService : Service() {
 
         stopLibreConnectService()
         serviceScope.cancel()
+        // Unregister network change receiver
+        unregisterReceiver(networkChangeReceiver)
     }
 
     private fun createNotificationChannel() {
@@ -180,7 +198,7 @@ class LibreConnectService : Service() {
 
         serviceScope.launch {
             try {
-                Log.d(TAG, "Starting LibreConnect service components")
+                Log.d(TAG, "Starting LibreConnect service components. isServiceRunning: ${_isServiceRunning.value}")
 
                 // Start network manager
                 networkManager.start()
@@ -194,9 +212,6 @@ class LibreConnectService : Service() {
 
                 // Start real device discovery
                 startDeviceDiscovery()
-
-                // Add manual test device for debugging
-                addManualTestDevice()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start LibreConnect service", e)
                 _connectionStatus.value = "Failed to start: ${e.message}"
@@ -237,12 +252,32 @@ class LibreConnectService : Service() {
     }
 
     private fun handleDeviceDiscovered(device: Device) {
-        Log.d(TAG, "Device discovered: ${device.name}")
+        Log.d(TAG, "Device discovered: ${device.name} (ID: ${device.id}, IP: ${device.ipAddress}, Connected: ${device.isConnected})")
 
         val currentDevices = _discoveredDevices.value.toMutableList()
         if (!currentDevices.any { it.id == device.id }) {
             currentDevices.add(device)
+            // Force immediate StateFlow emission
+            _discoveredDevices.value = emptyList()
             _discoveredDevices.value = currentDevices
+            Log.d(TAG, "Device added to list. Total discovered devices: ${_discoveredDevices.value.size}")
+            Log.d(TAG, "StateFlow value updated: ${_discoveredDevices.value.map { it.name }}")
+        } else {
+            Log.d(TAG, "Device already exists in list. Total discovered devices: ${_discoveredDevices.value.size}")
+            // Force StateFlow emission even for existing devices
+            _discoveredDevices.value = _discoveredDevices.value.toList()
+        }
+
+        // Check if this device is paired and attempt auto-reconnection
+        if (networkManager.isDevicePaired(device.id) && !networkManager.isConnectedToDevice(device.id)) {
+            Log.d(TAG, "Attempting auto-reconnection to paired device: ${device.name}")
+            serviceScope.launch {
+                try {
+                    networkManager.connectToDevice(device)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to auto-reconnect to paired device ${device.name}", e)
+                }
+            }
         }
     }
 
@@ -277,47 +312,43 @@ class LibreConnectService : Service() {
     // Device discovery is now handled by real mDNS discovery
     // Mock devices removed - devices will be discovered automatically
 
-    private fun addManualTestDevice() {
-        // Add a manual test device with the known daemon IP for testing
-        val testDevice =
-                Device(
-                        id = "manual-test-192.168.1.7",
-                        name = "Desktop Daemon (Manual)",
-                        type = DeviceType.DESKTOP,
-                        isConnected = false,
-                        ipAddress = "192.168.1.7",
-                        port = 1716,
-                        capabilities =
-                                listOf(
-                                        PluginCapability.CLIPBOARD,
-                                        PluginCapability.FILE_TRANSFER,
-                                        PluginCapability.INPUT_SHARE,
-                                        PluginCapability.NOTIFICATIONS,
-                                        PluginCapability.MEDIA_CONTROL,
-                                        PluginCapability.BATTERY_STATUS,
-                                        PluginCapability.REMOTE_COMMANDS,
-                                        PluginCapability.TOUCHPAD,
-                                        PluginCapability.SLIDE_CONTROL
-                                )
-                )
-
-        val currentDevices = _discoveredDevices.value.toMutableList()
-        currentDevices.add(testDevice)
-        _discoveredDevices.value = currentDevices
-
-        Log.d(
-                TAG,
-                "Added manual test device: ${testDevice.name} at ${testDevice.ipAddress}:${testDevice.port}"
-        )
+    private fun restartDeviceDiscovery() {
+        serviceScope.launch {
+            try {
+                Log.d(TAG, "Restarting device discovery due to network change")
+                deviceDiscovery.stop()
+                deviceDiscovery.startDiscovery()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restart device discovery", e)
+            }
+        }
     }
 
     // Public API for UI
     fun connectToDevice(deviceId: String) {
         serviceScope.launch {
+            Log.d(TAG, "connectToDevice called for deviceId: $deviceId")
             val device = _discoveredDevices.value.find { it.id == deviceId }
             if (device != null) {
-                Log.d(TAG, "Attempting to connect to device: ${device.name}")
+                Log.d(TAG, "Attempting to connect to device: ${device.name} (ID: ${device.id}, IP: ${device.ipAddress})")
                 networkManager.connectToDevice(device)
+            }
+        }
+    }
+    fun pairWithDevice(deviceId: String, pairingKey: String, callback: (Boolean, String?) -> Unit) {
+        serviceScope.launch {
+            Log.d(TAG, "pairWithDevice called for deviceId: $deviceId with key: $pairingKey")
+            val device = _discoveredDevices.value.find { it.id == deviceId }
+            if (device != null) {
+                Log.d(TAG, "Attempting to pair with device: ${device.name} (ID: ${device.id}, IP: ${device.ipAddress})")
+                val success = networkManager.pairWithDevice(device, pairingKey)
+                withContext(Dispatchers.Main) {
+                    callback(success, if (success) null else "Invalid pairing code or connection failed")
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    callback(false, "Device not found")
+                }
             }
         }
     }
@@ -399,5 +430,20 @@ class LibreConnectService : Service() {
                 Log.w(TAG, "Device not found: $deviceId")
             }
         }
+    }
+
+    // Paired device management methods
+    fun getPairedDevices(): List<Device> {
+        return networkManager.getPairedDevices()
+    }
+
+    fun unpairDevice(deviceId: String) {
+        Log.d(TAG, "Unppairing device: $deviceId")
+        networkManager.unpairDevice(deviceId)
+    }
+
+    fun clearAllPairedDevices() {
+        Log.d(TAG, "Clearing all paired devices")
+        networkManager.clearAllPairedDevices()
     }
 }

@@ -5,4 +5,5 @@ members = [
     "cli",
     "shared",
     "plugins",
+    "tests/integration",
 ]

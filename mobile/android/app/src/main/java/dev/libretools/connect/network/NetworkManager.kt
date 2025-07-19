@@ -1,7 +1,9 @@
 package dev.libretools.connect.network
 
+import android.content.Context
 import android.util.Log
 import dev.libretools.connect.data.Device
+import dev.libretools.connect.data.PairedDeviceStorage
 import java.io.*
 import java.net.Socket
 import java.net.SocketTimeoutException
@@ -9,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
 
 class NetworkManager(
+        private val context: Context,
         private val onDeviceConnected: (Device) -> Unit,
         private val onDeviceDisconnected: (Device) -> Unit,
         private val onConnectionStatusChanged: (String) -> Unit
@@ -17,11 +20,13 @@ class NetworkManager(
         private const val TAG = "NetworkManager"
         private const val DEFAULT_PORT = 1716
         private const val CONNECTION_TIMEOUT = 10000 // 10 seconds
-        private const val READ_TIMEOUT = 30000 // 30 seconds
-        private const val HEARTBEAT_INTERVAL = 30000L // 30 seconds
+        private const val READ_TIMEOUT = 120000 // 2 minutes (much longer)
+        private const val CONNECTION_CHECK_INTERVAL = 120000L // 2 minutes (much less frequent)
+        private const val VERBOSE_LOGGING = true // Enable verbose logging for debugging
     }
 
     private val protocolAdapter = ProtocolAdapter()
+    private val pairedDeviceStorage = PairedDeviceStorage(context)
 
     // Active connections to devices
     private val activeConnections = ConcurrentHashMap<String, DeviceConnection>()
@@ -40,7 +45,7 @@ class NetworkManager(
         withContext(Dispatchers.IO) {
             Log.d(TAG, "Starting NetworkManager")
             isManagerActive = true
-            startHeartbeat()
+            // DISABLED: startHeartbeat() - removing broken heartbeat system
             onConnectionStatusChanged("NetworkManager Started")
         }
     }
@@ -79,28 +84,38 @@ class NetworkManager(
                 onConnectionStatusChanged("Connecting to ${device.name}...")
 
                 // Use real IP address and port from discovered device
-                val ipAddress =
-                        device.ipAddress
-                                ?: throw IllegalArgumentException("Device has no IP address")
+                val ipAddress = device.ipAddress ?: throw IllegalArgumentException("Device has no IP address")
+                if (VERBOSE_LOGGING) Log.v(TAG, "Device IP Address: $ipAddress")
                 val port = device.port ?: DEFAULT_PORT
+                if (VERBOSE_LOGGING) Log.v(TAG, "Device Port: $port")
 
-                Log.d(TAG, "Connecting to ${device.name} at $ipAddress:$port")
+                Log.d(TAG, "Attempting to connect to ${device.name} at $ipAddress:$port")
 
                 val socket = Socket()
                 socket.connect(java.net.InetSocketAddress(ipAddress, port), CONNECTION_TIMEOUT)
+                Log.d(TAG, "Socket connected to ${device.name}")
                 socket.soTimeout = READ_TIMEOUT
 
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+                Log.d(TAG, "Input/Output streams opened for ${device.name}")
 
-                // Send initial device info handshake
+                // Send initial pairing request instead of device info
                 val deviceId = "android-${android.os.Build.MODEL}-${System.currentTimeMillis()}"
                 val deviceName = "Android Device (${android.os.Build.MODEL})"
-                val handshakeMessage = protocolAdapter.createDeviceInfoMessage(deviceId, deviceName)
+                val pairingMessage = protocolAdapter.createPairingRequestMessage(deviceId, deviceName)
+                if (VERBOSE_LOGGING) Log.v(TAG, "Sending pairing request: $pairingMessage")
+                Log.d(TAG, "Sending pairing request to ${device.name}: $pairingMessage")
 
-                writer.write(handshakeMessage)
+                writer.write(pairingMessage)
                 writer.newLine()
-                writer.flush()
+                try {
+                    writer.flush()
+                    if (VERBOSE_LOGGING) Log.v(TAG, "Handshake message flushed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to flush handshake message", e)
+                    return@withContext
+                }
 
                 // Start message listening job
                 val job =
@@ -123,6 +138,95 @@ class NetworkManager(
         }
     }
 
+    suspend fun pairWithDevice(device: Device, pairingKey: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (activeConnections.containsKey(device.id)) {
+                Log.d(TAG, "Already connected to ${device.name}")
+                return@withContext true
+            }
+
+            try {
+                Log.d(TAG, "Pairing with ${device.name} using key: $pairingKey")
+                onConnectionStatusChanged("Pairing with ${device.name}...")
+
+                // Use real IP address and port from discovered device
+                val ipAddress = device.ipAddress ?: throw IllegalArgumentException("Device has no IP address")
+                val port = device.port ?: DEFAULT_PORT
+
+                val socket = Socket()
+                socket.connect(java.net.InetSocketAddress(ipAddress, port), CONNECTION_TIMEOUT)
+                socket.soTimeout = READ_TIMEOUT
+
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+
+                // Send pairing request with key
+                val deviceId = "android-${android.os.Build.MODEL}-${System.currentTimeMillis()}"
+                val deviceName = "Android Device (${android.os.Build.MODEL})"
+                val pairingMessage = protocolAdapter.createPairingRequestWithKeyMessage(deviceId, deviceName, pairingKey)
+                
+                writer.write(pairingMessage)
+                writer.newLine()
+                writer.flush()
+
+                // Wait for pairing response (with timeout)
+                val startTime = System.currentTimeMillis()
+                var pairingResult: Boolean? = null
+                
+                while (pairingResult == null && System.currentTimeMillis() - startTime < 10000) {
+                    try {
+                        socket.soTimeout = 1000 // 1 second timeout for each read attempt
+                        val response = reader.readLine()
+                        if (response != null) {
+                            val parsedMessage = protocolAdapter.parseIncomingMessage(response)
+                            when (parsedMessage) {
+                                is ProtocolAdapter.ParsedMessage.PairingAccepted -> {
+                                    pairingResult = true
+                                    Log.d(TAG, "Pairing accepted by ${device.name}")
+                                }
+                                is ProtocolAdapter.ParsedMessage.PairingRejected -> {
+                                    pairingResult = false
+                                    Log.d(TAG, "Pairing rejected by ${device.name}")
+                                }
+                                else -> {
+                                    // Ignore other message types during pairing
+                                }
+                            }
+                        }
+                    } catch (e: java.net.SocketTimeoutException) {
+                        // Continue waiting
+                        continue
+                    }
+                }
+
+                if (pairingResult == true) {
+                    // Reset socket timeout to normal read timeout for ongoing communication
+                    socket.soTimeout = READ_TIMEOUT
+                    
+                    // Start message listening job
+                    val job = CoroutineScope(Dispatchers.IO).launch { listenForMessages(device, reader) }
+                    val connection = DeviceConnection(device, socket, reader, writer, job)
+                    activeConnections[device.id] = connection
+
+                    // Save paired device to persistent storage
+                    pairedDeviceStorage.savePairedDevice(device)
+
+                    onDeviceConnected(device)
+                    onConnectionStatusChanged("Successfully paired with ${device.name}")
+                    return@withContext true
+                } else {
+                    socket.close()
+                    onConnectionStatusChanged("Pairing failed with ${device.name}")
+                    return@withContext false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to pair with ${device.name}", e)
+                onConnectionStatusChanged("Failed to pair with ${device.name}: ${e.message}")
+                return@withContext false
+            }
+        }
+    }
+
     suspend fun disconnectFromDevice(device: Device) {
         withContext(Dispatchers.IO) {
             val connection = activeConnections.remove(device.id)
@@ -134,7 +238,11 @@ class NetworkManager(
                     val pingMessage = protocolAdapter.createPingMessage()
                     connection.writer.write(pingMessage)
                     connection.writer.newLine()
-                    connection.writer.flush()
+                    try {
+                        connection.writer.flush()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to flush ping message", e)
+                    }
 
                     connection.job.cancel()
                     connection.socket.close()
@@ -236,25 +344,32 @@ class NetworkManager(
 
     private suspend fun listenForMessages(device: Device, reader: BufferedReader) {
         try {
+            Log.d(TAG, "Started listening for messages from ${device.name}")
             while (isManagerActive) {
                 val line = reader.readLine() ?: break
 
+                Log.d(TAG, "Received raw message from ${device.name}: $line")
                 try {
                     val parsedMessage = protocolAdapter.parseIncomingMessage(line)
                     if (parsedMessage != null) {
+                        if (VERBOSE_LOGGING) Log.v(TAG, "Parsed message: $parsedMessage")
                         handleIncomingMessage(device, parsedMessage)
                     } else {
                         Log.w(TAG, "Failed to parse message from ${device.name}: $line")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing message from ${device.name}: $line", e)
+                } finally {
+                    if (VERBOSE_LOGGING) Log.v(TAG, "Finished processing line: $line")
                 }
             }
+            Log.d(TAG, "Stopped listening for messages from ${device.name} - isManagerActive: $isManagerActive")
         } catch (e: IOException) {
             Log.e(TAG, "Connection lost to ${device.name}", e)
             handleConnectionLost(device)
         } catch (e: Exception) {
             Log.e(TAG, "Error listening for messages from ${device.name}", e)
+            handleConnectionLost(device)
         }
     }
 
@@ -307,28 +422,13 @@ class NetworkManager(
     }
 
     private fun startHeartbeat() {
-        heartbeatJob =
-                CoroutineScope(Dispatchers.IO).launch {
-                    while (isManagerActive) {
-                        delay(HEARTBEAT_INTERVAL)
-                        sendHeartbeat()
-                    }
-                }
+        // Heartbeat disabled to prevent connection drops
+        Log.d(TAG, "Heartbeat system disabled for stable connections")
     }
 
     private suspend fun sendHeartbeat() {
-        val connections = activeConnections.values.toList()
-        connections.forEach { connection ->
-            try {
-                val pingMessage = protocolAdapter.createPingMessage()
-                connection.writer.write(pingMessage)
-                connection.writer.newLine()
-                connection.writer.flush()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to send heartbeat to ${connection.device.name}", e)
-                handleConnectionLost(connection.device)
-            }
-        }
+        // Heartbeat disabled to prevent connection drops  
+        Log.d(TAG, "Heartbeat system disabled for stable connections")
     }
 
     fun getConnectedDevices(): List<Device> {
@@ -337,5 +437,66 @@ class NetworkManager(
 
     fun isConnectedToDevice(deviceId: String): Boolean {
         return activeConnections.containsKey(deviceId)
+    }
+
+    /**
+     * Get all paired devices from storage
+     */
+    fun getPairedDevices(): List<Device> {
+        return pairedDeviceStorage.loadPairedDevices()
+    }
+
+    /**
+     * Check if a device is paired
+     */
+    fun isDevicePaired(deviceId: String): Boolean {
+        return pairedDeviceStorage.isDevicePaired(deviceId)
+    }
+
+    /**
+     * Remove a paired device
+     */
+    fun unpairDevice(deviceId: String) {
+        pairedDeviceStorage.removePairedDevice(deviceId)
+        // Also disconnect if currently connected
+        val device = activeConnections[deviceId]?.device
+        if (device != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                disconnectFromDevice(device)
+            }
+        }
+    }
+
+    /**
+     * Clear all paired devices
+     */
+    fun clearAllPairedDevices() {
+        pairedDeviceStorage.clearAllPairedDevices()
+    }
+
+    /**
+     * Attempt to reconnect to all paired devices that are currently available
+     */
+    suspend fun reconnectToPairedDevices(availableDevices: List<Device>) {
+        withContext(Dispatchers.IO) {
+            val pairedDevices = pairedDeviceStorage.loadPairedDevices()
+            Log.d(TAG, "Attempting to reconnect to ${pairedDevices.size} paired device(s)")
+
+            for (pairedDevice in pairedDevices) {
+                // Check if this paired device is in the available devices list
+                val availableDevice = availableDevices.find { it.id == pairedDevice.id }
+                if (availableDevice != null && !isConnectedToDevice(pairedDevice.id)) {
+                    Log.d(TAG, "Attempting auto-reconnection to paired device: ${pairedDevice.name}")
+                    try {
+                        // Use the updated device info (IP address may have changed)
+                        connectToDevice(availableDevice)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to auto-reconnect to ${pairedDevice.name}", e)
+                    }
+                } else if (availableDevice == null) {
+                    Log.d(TAG, "Paired device ${pairedDevice.name} is not currently available")
+                }
+            }
+        }
     }
 }
